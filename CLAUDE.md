@@ -51,9 +51,6 @@ Appends every tool use to `~/.claude/audit.log`.
 **Stop** — `stop-build-and-fix.sh`
 Runs the project build (`dotnet build` / `npm run build`). On failure, calls Claude Haiku to fix and retries once.
 
-**Stop** — `stop-git-autocommit.sh`
-Auto-commits any staged changes with a conventional commit message derived from diff stats. Skips on `main`, `master`, and `develop`.
-
 ---
 
 ## Working in This Repo

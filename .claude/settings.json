@@ -54,10 +54,6 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/stop-build-and-fix.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/stop-git-autocommit.sh"
           }
         ]
       }
