@@ -6,35 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/pre-dangerous-command.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/pre-block-force-push.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/pre-warn-production-db.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/pre-block-commit-main.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/pre-conventional-commit.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/pre-block-secrets.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/pre-block-destructive-git.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/pre-block-large-files.sh"
+            "command": "bash ~/.claude/hooks/pre-guard.sh"
           }
         ]
       }
@@ -62,6 +34,10 @@
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/stop-build-and-fix.sh"
+          },
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/stop-git-autocommit.sh"
