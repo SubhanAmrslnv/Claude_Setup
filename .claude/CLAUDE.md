@@ -38,7 +38,7 @@ This repository is a **Claude Code global configuration** workspace. It contains
 
 **Stop**
 - Runs project build (`dotnet build` / `npm run build` / React Native); on failure calls Claude Haiku to fix and retries once
-- Auto-commits staged changes with an AI-generated conventional commit message (requires `ANTHROPIC_API_KEY`)
+- Auto-commits staged changes with a conventional commit message derived from diff stats
 - Shows a Windows desktop notification when Claude finishes
 
 ---

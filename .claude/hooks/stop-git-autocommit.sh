@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Automatically commits Claude's changes after each session.
 # - Stages modified tracked files only (respects .gitignore, skips untracked)
-# - Calls Claude API (Haiku) to generate a conventional commit message from the diff
-# - Falls back to a stats-based message if the API key is missing or the call fails
+# - Generates a conventional commit message from diff stats
 # - Skips if on main/master (force branch workflow)
 
 set -uo pipefail
@@ -22,44 +21,32 @@ git diff --cached --quiet && exit 0
 # Cache once — reused for stat, body, file list
 cached_files=$(git diff --cached --name-only)
 diff_stat=$(git diff --cached --stat)
-diff_body=$(git diff --cached | head -200)
 changed_files=$(echo "$cached_files" | sed 's/^/  - /')
 
-commit_msg=""
+first_file=$(echo "$cached_files" | head -1)
+file_count=$(echo "$cached_files" | wc -l | tr -d ' ')
 
-if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-  prompt=$(jq -rn \
-    --arg stat "$diff_stat" \
-    --arg diff "$diff_body" \
-    --arg files "$changed_files" \
-    '"Generate a git commit message for these changes.\n\nRules:\n- First line: conventional commit format — type(scope): subject (max 72 chars)\n- Valid types: feat, fix, chore, refactor, docs, test, ci, build, perf, style\n- Blank line after subject\n- Then 2–5 bullet points describing what specifically changed\n- Be concrete — use file names and actual change details\n- Return only the commit message, no extra text\n\nDiff stat:\n\($stat)\n\nChanged files:\n\($files)\n\nDiff (first 200 lines):\n\($diff)"'
-  )
+# Derive conventional commit type from changed file extensions
+ext="${first_file##*.}"
+case "$ext" in
+  md|txt)        type="docs" ;;
+  sh)            type="chore" ;;
+  cs)            type="feat" ;;
+  ts|tsx|js|jsx) type="feat" ;;
+  json|yaml|yml) type="chore" ;;
+  scss|css|html) type="style" ;;
+  *)             type="chore" ;;
+esac
 
-  response=$(curl -s https://api.anthropic.com/v1/messages \
-    -H "x-api-key: $ANTHROPIC_API_KEY" \
-    -H "anthropic-version: 2023-06-01" \
-    -H "content-type: application/json" \
-    -d "$(jq -n \
-      --arg content "$prompt" \
-      '{model: "claude-haiku-4-5-20251001", max_tokens: 300, messages: [{role: "user", content: $content}]}'
-    )" 2>/dev/null)
+subject="$type: update $first_file"
+[[ "$file_count" -gt 1 ]] && subject="$type: update $first_file and $((file_count - 1)) other file(s)"
 
-  commit_msg=$(echo "$response" | jq -r '.content[0].text // empty' 2>/dev/null || true)
-fi
-
-if [[ -z "$commit_msg" ]]; then
-  first_file=$(echo "$cached_files" | head -1)
-  file_count=$(echo "$cached_files" | wc -l | tr -d ' ')
-  subject="chore: update $first_file"
-  [[ "$file_count" -gt 1 ]] && subject="chore: update $first_file and $((file_count - 1)) other file(s)"
-
-  commit_msg="$subject
+commit_msg="$subject
 
 Files changed:
 $changed_files
 
 $diff_stat"
-fi
 
 git commit -m "$commit_msg"
 echo "[autocommit] Committed on '$branch': $(echo "$commit_msg" | head -1)"

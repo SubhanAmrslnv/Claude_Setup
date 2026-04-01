@@ -25,8 +25,8 @@ See [INSTALL.md](./INSTALL.md) for full machine setup (Git, jq, Node.js, .NET SD
 | PostToolUse | `post-dotnet-security-scan.sh` | Warn on unsafe .NET APIs in `.cs` files |
 | PostToolUse | `post-react-security-scan.sh` | Warn on XSS patterns in `.ts/.tsx/.js/.jsx` |
 | PostToolUse | `post-audit-log.sh` | Append every tool use to `audit.log` |
-| Stop | `stop-build-and-fix.sh` | Build project; auto-fix via Claude API on failure |
-| Stop | `stop-git-autocommit.sh` | AI-generated conventional commit after each session |
+| Stop | `stop-build-and-fix.sh` | Build project; prints errors for manual review on failure |
+| Stop | `stop-git-autocommit.sh` | Auto-generates conventional commit message from diff stats |
 | Stop | `stop-notify.sh` | Windows desktop notification when Claude finishes |
 
 ### Security Guards (`pre-guard.sh`)
@@ -67,7 +67,6 @@ Defined in `CLAUDE.md` and loaded automatically every session:
 | [Node.js](https://nodejs.org) | Prettier, ESLint |
 | [.NET SDK](https://dotnet.microsoft.com/download) | `dotnet format`, `dotnet build` |
 | [Claude Code](https://claude.ai/code) | `npm install -g @anthropic-ai/claude-code` |
-| `ANTHROPIC_API_KEY` | AI commit messages and build auto-fix |
 
 ---
 

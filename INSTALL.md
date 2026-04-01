@@ -86,19 +86,7 @@ claude --version
 
 ---
 
-## 5. Set ANTHROPIC_API_KEY
-
-Required for AI-generated commit messages and build auto-fix.
-
-Add to `~/.bashrc` or `~/.zshrc` (Git Bash profile):
-```bash
-echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.bashrc
-source ~/.bashrc
-```
-
----
-
-## 6. Clone and Link This Config
+## 5. Clone and Link This Config
 
 ```bash
 git clone https://github.com/SubhanAmrslnv/Claude_Setup.git
@@ -112,7 +100,7 @@ it will verify all hook scripts and settings are in place.
 
 ---
 
-## 7. Install Prettier and ESLint Globally
+## 6. Install Prettier and ESLint Globally
 
 Used by `post-format.sh` for TypeScript/React projects:
 ```bash
@@ -121,7 +109,7 @@ npm install -g prettier eslint
 
 ---
 
-## 8. Verify Setup
+## 7. Verify Setup
 
 Open Git Bash and run:
 ```bash
@@ -130,5 +118,4 @@ jq --version                   # confirm jq
 dotnet --version               # confirm .NET SDK
 node --version                 # confirm Node.js
 claude --version               # confirm Claude Code
-echo $ANTHROPIC_API_KEY        # confirm API key is set
 ```
