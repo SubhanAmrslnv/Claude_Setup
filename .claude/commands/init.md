@@ -9,10 +9,11 @@ Check that `~/.claude/hooks/` exists. If not, create it.
 Check that all required hook scripts exist in `~/.claude/hooks/`:
 - `pre-guard.sh`
 - `post-format.sh`
+- `post-secret-scan.sh`
+- `post-dotnet-security-scan.sh`
+- `post-react-security-scan.sh`
 - `post-audit-log.sh`
 - `stop-build-and-fix.sh`
-- `stop-git-autocommit.sh`
-- `stop-notify.sh`
 
 If any are missing, read the corresponding file from the current repo's `.claude/hooks/` directory and write it to `~/.claude/hooks/`.
 
