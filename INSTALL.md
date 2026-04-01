@@ -4,6 +4,17 @@ Complete setup guide for Git, Claude Code, and this global configuration on a ne
 
 ---
 
+## Quick Setup
+
+1. Drag and drop the `.claude` folder into your project or home directory
+2. Open Claude Code and type `/init`
+
+That's it — `/init` will verify all hooks, scripts, and settings are wired correctly.
+
+---
+
+---
+
 ## 1. Install Git
 
 **Download:** https://git-scm.com/download/win
