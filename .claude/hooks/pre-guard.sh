@@ -54,6 +54,36 @@ if echo "$cmd" | grep -qE '(^|;|&&|\|\|)\s*git commit'; then
   fi
 fi
 
+# 9. Reverse shell patterns
+if echo "$cmd" | grep -qiE '(bash|sh|zsh)\s+-i.*(&>|>).*(/dev/tcp|/dev/udp)|nc\s+.*-e\s*(bash|sh)|ncat|mkfifo'; then
+  echo "BLOCKED: possible reverse shell detected"
+  exit 1
+fi
+
+# 10. Base64-encoded command execution (obfuscation)
+if echo "$cmd" | grep -qiE '(base64\s+-d|base64\s+--decode).*\|\s*(bash|sh|python|node)|echo\s+[A-Za-z0-9+/]{20,}.*\|\s*(bash|sh)'; then
+  echo "BLOCKED: encoded command execution detected"
+  exit 1
+fi
+
+# 11. Writing to cron / shell startup files (persistence)
+if echo "$cmd" | grep -qiE '(crontab\s+-|/etc/cron|/etc/init\.d|~/\.bashrc|~/\.zshrc|~/\.profile|~/\.bash_profile).*>>?'; then
+  echo "BLOCKED: writing to startup or cron location"
+  exit 1
+fi
+
+# 12. curl/wget piped directly to interpreter (supply chain)
+if echo "$cmd" | grep -qiE '(curl|wget).*\|\s*(bash|sh|python|node|ruby|perl)'; then
+  echo "BLOCKED: piping remote content directly to interpreter"
+  exit 1
+fi
+
+# 13. Credential exfiltration via network tools
+if echo "$cmd" | grep -qiE '(curl|wget|nc|ncat).*\$\{?(ANTHROPIC_API_KEY|AWS_|GITHUB_TOKEN|PASSWORD|SECRET|TOKEN)'; then
+  echo "BLOCKED: possible credential exfiltration detected"
+  exit 1
+fi
+
 # 8. Large files >1MB — skip known binary/asset extensions
 if echo "$cmd" | grep -qE '(^|;|&&|\|\|)\s*git (add|commit)'; then
   if ! git diff --cached --quiet 2>/dev/null; then
