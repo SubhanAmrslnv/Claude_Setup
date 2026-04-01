@@ -1,0 +1,77 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pre-dangerous-command.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pre-block-force-push.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pre-warn-production-db.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pre-block-commit-main.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pre-conventional-commit.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pre-block-secrets.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pre-block-destructive-git.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pre-block-large-files.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/post-format.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/post-audit-log.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/stop-git-autocommit.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/stop-notify.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
