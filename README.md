@@ -35,7 +35,7 @@ Open Claude Code in your project and run `/init` to verify hooks and settings ar
 ### Security Guards (`pre-guard.sh`)
 
 - Dangerous commands: `rm -rf`, `drop table`, `truncate`, `--force`
-- Force-push or direct commit to `main`/`master`
+- Force-push or direct commit to `main`/`master`/`develop`
 - Non-conventional commit message format
 - Staging secret files (`.env`, `.key`, `.pem`, `.pfx`)
 - Destructive git ops (`reset --hard`, `clean -f`)
