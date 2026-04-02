@@ -1,25 +1,21 @@
 # Cortex — Claude Code Global Configuration
 
 Version-controlled global configuration for [Claude Code](https://claude.ai/code).
-Covers security guards, auto-formatting, audit logging, and behavior rules for .NET (C#), TypeScript, React, and React Native projects.
+Covers security guards, auto-formatting, audit logging, and behavior rules for .NET (C#) projects.
 
 ---
 
-## New Machine Setup
+## Setup
+
+Copy the `.claude` folder into the root of your target project:
 
 ```bash
-git clone https://github.com/SubhanAmrslnv/Cortex.git ~/.claude/Cortex
+cp -r .claude /path/to/your/project/
 ```
 
-Then open Claude Code in this directory and run:
+That is the only required step. No installation, no configuration, no additional dependencies.
 
-```
-/init
-```
-
-`/init` verifies all hooks, scripts, and settings are wired correctly — run it whenever you set up a new machine or after pulling updates.
-
-See [INSTALL.md](./INSTALL.md) for full prerequisites (Git, jq, Node.js, .NET SDK).
+Open Claude Code in your project and run `/init` to verify hooks and settings are wired correctly.
 
 ---
 
@@ -29,14 +25,12 @@ See [INSTALL.md](./INSTALL.md) for full prerequisites (Git, jq, Node.js, .NET SD
 
 | Event | Script | What it does |
 |---|---|---|
-| PreToolUse (Bash) | `pre-guard.sh` | Blocks 18 categories of dangerous commands before they run |
-| PostToolUse (Write\|Edit) | `post-format.sh` | Auto-formats `.cs`, `.ts`, `.html`, `.scss` on save |
+| PreToolUse (Bash) | `pre-guard.sh` | Blocks dangerous commands before they run |
+| PostToolUse (Write\|Edit) | `post-format.sh` | Auto-formats `.cs` files on save |
 | PostToolUse (Write\|Edit) | `post-secret-scan.sh` | Warns on hardcoded secrets in any file |
 | PostToolUse (Write\|Edit) | `post-dotnet-security-scan.sh` | Warns on unsafe .NET APIs in `.cs` files |
-| PostToolUse (Write\|Edit) | `post-react-security-scan.sh` | Warns on XSS patterns in `.ts/.tsx/.js/.jsx` |
 | PostToolUse (Write\|Edit\|Bash) | `post-audit-log.sh` | Appends every tool use to `~/.claude/audit.log` |
 | Stop | `stop-build-and-fix.sh` | Builds project; on failure calls Claude Haiku to fix and retries |
-| Stop | `stop-git-autocommit.sh` | Auto-generates a conventional commit message from diff stats |
 
 ### Security Guards (`pre-guard.sh`)
 
@@ -66,20 +60,9 @@ Run this after any hook edit, or run `/init` to do it automatically.
 
 ---
 
-## Requirements
-
-| Tool | Purpose |
-|---|---|
-| [Git](https://git-scm.com/download/win) | Version control |
-| [jq](https://jqlang.github.io/jq/download/) | JSON parsing in hook scripts |
-| [Node.js](https://nodejs.org) | Prettier, ESLint |
-| [.NET SDK](https://dotnet.microsoft.com/download) | `dotnet format`, `dotnet build` |
-| [Claude Code](https://claude.ai/code) | `npm install -g @anthropic-ai/claude-code` |
-
----
-
 ## Custom Commands
 
 | Command | Description |
 |---|---|
-| `/init` | Verify and restore all hooks, scripts, and settings on a new machine |
+| `/init` | Verify and restore all hooks, scripts, and settings |
+| `/commit` | Interactive conventional commit with branch routing |
