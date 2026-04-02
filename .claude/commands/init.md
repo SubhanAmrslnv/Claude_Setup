@@ -11,7 +11,6 @@ Check that all required hook scripts exist in `~/.claude/hooks/`:
 - `post-format.sh`
 - `post-secret-scan.sh`
 - `post-dotnet-security-scan.sh`
-- `post-react-security-scan.sh`
 - `post-audit-log.sh`
 - `stop-build-and-fix.sh`
 
@@ -25,3 +24,9 @@ Check if `ANTHROPIC_API_KEY` is set in the environment. If not, remind the user 
 
 ## 5. Report
 Print a summary table of what was already present, what was created, and what still needs manual action.
+
+## 6. Memorize
+After the report, save a memory of the initialization state:
+- Save or update a `project` memory recording which hooks were present, which were created, and whether `ANTHROPIC_API_KEY` was set at the time of init.
+- Use the memory file `init_state.md` under the project memory directory.
+- Update the `MEMORY.md` index with a pointer to `init_state.md` if not already present.

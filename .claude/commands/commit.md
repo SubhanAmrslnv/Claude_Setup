@@ -27,15 +27,20 @@ Wait for explicit user input. Do NOT:
 - Proceed until the user provides one
 
 Then ask:
-"Please enter commit message:"
+"Please enter commit message (subject line):"
 
 Wait for explicit user input. Do NOT proceed until a non-empty message is provided.
 
-Once both are provided:
+Then ask:
+"Please enter a short description (optional, press Enter to skip):"
+
+Wait for user input.
+
+Once all are provided:
 1. Run: `git checkout -b <branch-name>`
 2. Respond: "Branch '<branch-name>' created and switched."
 3. Run: `git add -u`
-4. Proceed to Step 4 using the user-provided message.
+4. Proceed to Step 4 using the user-provided subject and description (if any).
 
 ### CASE B — Safe branch
 
@@ -63,14 +68,29 @@ Rules:
 - No Claude attribution, no emoji
 - 72 characters max
 
-Show the generated message to the user:
-"Generated commit message: '<message>'"
+Also auto-generate a commit **description** (body) from the diff:
+- 2–5 bullet points (using `-`) explaining *what* changed and *why*
+- Each bullet is one concrete fact derived from the diff — no vague filler
+- No Claude attribution, no emoji
 
-Proceed to Step 4 using the generated message.
+Show both to the user:
+```
+Generated commit message:
+  Subject: '<subject>'
+  Description:
+    - <bullet 1>
+    - <bullet 2>
+    ...
+```
+
+Proceed to Step 4 using the generated subject and description.
 
 ## Step 4 — Commit
 
-Run: `git commit -m "<message>"`
+Run:
+```
+git commit -m "<subject>" -m "<description as plain text, bullets joined with newlines>"
+```
 
 On success, respond:
-"Commit created successfully on '<branch-name>' with message: '<message>'"
+"Commit created successfully on '<branch-name>' with message: '<subject>'"

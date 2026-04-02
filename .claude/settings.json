@@ -31,10 +31,6 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/post-dotnet-security-scan.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/post-react-security-scan.sh"
           }
         ]
       },
