@@ -12,7 +12,7 @@ if echo "$cmd" | grep -qiE '(^|;|&&|\|\|)\s*(drop table|rm -rf|truncate)|--force
 fi
 
 # 2. Force-push to protected branch
-if echo "$cmd" | grep -qE '(^|;|&&|\|\|)\s*git push.*(--force|-f).*(main|master)|(^|;|&&|\|\|)\s*git push.*(main|master).*(--force|-f)'; then
+if echo "$cmd" | grep -qE '(^|;|&&|\|\|)\s*git push.*(--force|-f).*(main|master|develop)|(^|;|&&|\|\|)\s*git push.*(main|master|develop).*(--force|-f)'; then
   echo "BLOCKED: force-push to protected branch"
   exit 1
 fi
@@ -40,7 +40,7 @@ if echo "$cmd" | grep -qE '(^|;|&&|\|\|)\s*git commit'; then
   branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
   # 6. Block direct commit to main/master
-  if [[ "$branch" == "main" || "$branch" == "master" ]]; then
+  if [[ "$branch" == "main" || "$branch" == "master" || "$branch" == "develop" ]]; then
     git diff --cached --quiet || { echo "BLOCKED: direct commit to $branch — use a feature branch"; exit 1; }
   fi
 
