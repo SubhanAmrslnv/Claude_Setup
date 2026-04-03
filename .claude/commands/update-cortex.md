@@ -32,6 +32,11 @@ When the user runs the command `/update-cortex`, you MUST:
    - Confirm success clearly
    - Show latest commit hash and message from Cortex
 
+CONFLICT HANDLING:
+- If any merge conflicts arise during the update, DO NOT auto-resolve them.
+- Present the conflicting hunks to the user and wait for explicit instructions.
+- Never pick a side, discard changes, or suggest a resolution without user approval.
+
 CONSTRAINTS:
 - Do not ask for confirmation.
 - Do not provide multiple options.
