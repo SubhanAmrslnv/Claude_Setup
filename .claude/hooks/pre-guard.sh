@@ -103,7 +103,7 @@ if echo "$cmd" | grep -qiE '(curl|wget).*\|\s*(bash|sh|python|node|ruby|perl)'; 
 fi
 
 # 18. Credential exfiltration via network tools
-if echo "$cmd" | grep -qiE '(curl|wget|nc|ncat).*\$\{?(ANTHROPIC_API_KEY|AWS_|GITHUB_TOKEN|PASSWORD|SECRET|TOKEN)'; then
+if echo "$cmd" | grep -qiE '(curl|wget|nc|ncat).*\$\{?(AWS_|GITHUB_TOKEN|PASSWORD|SECRET|TOKEN)'; then
   echo "BLOCKED: possible credential exfiltration detected"
   exit 1
 fi

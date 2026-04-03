@@ -19,14 +19,11 @@ If any are missing, read the corresponding file from the current repo's `.claude
 ## 3. Verify settings.json
 Check that `~/.claude/settings.json` exists and contains the `hooks` key wiring all the scripts above. If missing or incomplete, copy from this repo's `.claude/settings.json`.
 
-## 4. Verify ANTHROPIC_API_KEY
-Check if `ANTHROPIC_API_KEY` is set in the environment. If not, remind the user to add it to their shell profile (`~/.bashrc` or `~/.zshrc`) — it is required for AI-generated commit messages and auto build-fix.
-
-## 5. Report
+## 4. Report
 Print a summary table of what was already present, what was created, and what still needs manual action.
 
-## 6. Memorize
+## 5. Memorize
 After the report, save a memory of the initialization state:
-- Save or update a `project` memory recording which hooks were present, which were created, and whether `ANTHROPIC_API_KEY` was set at the time of init.
+- Save or update a `project` memory recording which hooks were present and which were created.
 - Use the memory file `init_state.md` under the project memory directory.
 - Update the `MEMORY.md` index with a pointer to `init_state.md` if not already present.

@@ -19,17 +19,3 @@ Open Claude Code in your project directory and run:
 ```
 
 `/init` verifies all hooks and settings are wired correctly. Run it once after placing the folder.
-
----
-
-## Optional: ANTHROPIC_API_KEY
-
-Required only if you use AI-assisted commit messages or the auto build-fix hook.
-
-Add to your shell profile (`~/.bashrc` or `~/.zshrc`):
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-```
-
-Then reload: `source ~/.bashrc`
