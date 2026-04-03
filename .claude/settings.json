@@ -18,19 +18,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/post-format.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/post-secret-scan.sh"
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/post-dotnet-security-scan.sh"
+            "command": "bash ~/.claude/hooks/post-scan.sh"
           }
         ]
       },
@@ -49,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/stop-build-and-fix.sh"
+            "command": "bash /c/Users/subhan.amiraslanov/Desktop/Claude/Cortex/.claude/.cortex/core/hooks/runtime/stop-build.sh"
           }
         ]
       }

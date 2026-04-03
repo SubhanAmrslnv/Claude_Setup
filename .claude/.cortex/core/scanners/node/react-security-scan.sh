@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Scans React/React Native/JS/TS files for XSS-prone and unsafe patterns:
+# @version: 1.0.0
+# Scans React/JS/TS files for XSS-prone and unsafe patterns:
 # dangerouslySetInnerHTML, eval(), document.write, direct innerHTML assignment.
+# Usage: react-security-scan.sh <file_path>
 
-file=$(echo "$TOOL_INPUT" | jq -r '.file_path // empty')
-
+file="$1"
 [[ -z "$file" || ! -f "$file" ]] && exit 0
 [[ $file != *.tsx && $file != *.ts && $file != *.jsx && $file != *.js ]] && exit 0
 

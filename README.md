@@ -1,7 +1,7 @@
 # Cortex — Claude Code Global Configuration
 
 Version-controlled global configuration for [Claude Code](https://claude.ai/code).
-Covers security guards, auto-formatting, audit logging, and behavior rules for .NET (C#) projects.
+Covers security guards, auto-formatting, audit logging, and behavior rules for .NET (C#) and Node/React projects.
 
 ---
 
@@ -12,8 +12,6 @@ Copy the `.claude` folder into the root of your target project:
 ```bash
 cp -r .claude /path/to/your/project/
 ```
-
-That is the only required step. No installation, no configuration, no additional dependencies.
 
 Open Claude Code in your project and run `/init` to verify hooks and settings are wired correctly.
 
@@ -26,12 +24,12 @@ Open Claude Code in your project and run `/init` to verify hooks and settings ar
 | Event | Script | What it does |
 |---|---|---|
 | PreToolUse (Bash) | `pre-guard.sh` | Blocks dangerous commands before they run |
-| PostToolUse (Write\|Edit) | `post-format.sh` | Auto-formats `.cs` via dotnet format; `.ts/.html/.scss` via Prettier; `.ts` via ESLint |
-| PostToolUse (Write\|Edit) | `post-secret-scan.sh` | Warns on hardcoded secrets in any file |
-| PostToolUse (Write\|Edit) | `post-dotnet-security-scan.sh` | Warns on unsafe .NET APIs in `.cs` files |
-| PostToolUse (Write\|Edit) | `post-react-security-scan.sh` | Warns on XSS patterns in React/TS files |
+| PostToolUse (Write\|Edit) | `post-format.sh` | Dispatches formatting to language scanners (dotnet/node) |
+| PostToolUse (Write\|Edit) | `post-scan.sh` | Runs secret scan on all files; dispatches security scans by language |
 | PostToolUse (Write\|Edit\|Bash) | `post-audit-log.sh` | Appends every tool use to `~/.claude/audit.log` |
-| Stop | `stop-build-and-fix.sh` | Builds project; on failure calls Claude Haiku to fix and retries |
+| Stop | `stop-build.sh` | Builds project; on failure prints errors for manual review |
+
+Hooks live in `.claude/.cortex/core/hooks/`. The first four are deployed to `~/.claude/hooks/` by `/init`. The Stop hook runs directly from `.claude/.cortex/core/hooks/runtime/stop-build.sh`.
 
 ### Security Guards (`pre-guard.sh`)
 
@@ -51,13 +49,7 @@ Open Claude Code in your project and run `/init` to verify hooks and settings ar
 
 ## Deploying Hook Changes
 
-Hook scripts live in `.claude/hooks/` (source) and must be synced to `~/.claude/hooks/` (runtime):
-
-```bash
-cp .claude/hooks/*.sh ~/.claude/hooks/
-```
-
-Run this after any hook edit, or run `/init` to do it automatically.
+Hook scripts live in `.claude/.cortex/core/hooks/` (source). Run `/init` after any hook edit — it version-compares and deploys only outdated hooks to `~/.claude/hooks/`.
 
 ---
 
@@ -65,6 +57,7 @@ Run this after any hook edit, or run `/init` to do it automatically.
 
 | Command | Description |
 |---|---|
-| `/init` | Verify and restore all hooks, scripts, and settings |
+| `/init` | Version-aware hook deployment, registry validation, settings check |
 | `/commit` | Interactive conventional commit with branch routing |
-| `/update-cortex` | Sync the `.claude` folder with the latest Cortex remote |
+| `/doctor` | Full system diagnostics — checks hooks, settings, registry, scanners |
+| `/update-cortex` | Safely update `.claude/.cortex/base/` from remote with diff preview |

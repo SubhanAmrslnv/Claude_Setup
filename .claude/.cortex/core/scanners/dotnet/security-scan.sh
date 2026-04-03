@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
+# @version: 1.0.0
 # Scans .cs files for dangerous .NET APIs: unsafe deserialization,
 # Process.Start, Shell(), and other common vulnerability patterns.
+# Usage: security-scan.sh <file_path>
 
-file=$(echo "$TOOL_INPUT" | jq -r '.file_path // empty')
-
+file="$1"
 [[ -z "$file" || ! -f "$file" ]] && exit 0
 [[ $file != *.cs ]] && exit 0
 

@@ -1,0 +1,18 @@
+{
+  "pre-guard.sh": {
+    "version": "1.0.0",
+    "source": "core/hooks/guards/pre-guard.sh"
+  },
+  "post-format.sh": {
+    "version": "1.0.0",
+    "source": "core/hooks/runtime/post-format.sh"
+  },
+  "post-scan.sh": {
+    "version": "1.0.0",
+    "source": "core/hooks/runtime/post-scan.sh"
+  },
+  "post-audit-log.sh": {
+    "version": "1.0.0",
+    "source": "core/hooks/runtime/post-audit-log.sh"
+  }
+}

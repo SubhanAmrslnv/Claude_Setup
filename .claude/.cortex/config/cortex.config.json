@@ -1,0 +1,6 @@
+{
+  "version": "2.0.0",
+  "runtime_hooks_dir": "~/.claude/hooks",
+  "runtime_env_file": "~/.claude/cortex.env",
+  "settings_file": "~/.claude/settings.json"
+}

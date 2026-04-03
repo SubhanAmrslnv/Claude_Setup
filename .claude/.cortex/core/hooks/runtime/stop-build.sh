@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# After Claude finishes, detects the project type and runs the build.
-# On failure, prints the error output for manual review.
+# @version: 1.0.0
+# Stop hook — detects project type, runs the build, and reports failures.
+# Does NOT auto-fix. On failure: print errors, suggest manual review, exit 1.
 
 set -uo pipefail
 
@@ -39,6 +40,8 @@ if [[ $build_exit -eq 0 ]]; then
   exit 0
 fi
 
-echo "[build] Build failed — review errors below:"
+echo "[build] Build FAILED — review errors below and fix manually:"
+echo "---"
 echo "$build_output"
+echo "---"
 exit 1
