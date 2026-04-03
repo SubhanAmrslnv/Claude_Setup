@@ -26,9 +26,10 @@ Open Claude Code in your project and run `/init` to verify hooks and settings ar
 | Event | Script | What it does |
 |---|---|---|
 | PreToolUse (Bash) | `pre-guard.sh` | Blocks dangerous commands before they run |
-| PostToolUse (Write\|Edit) | `post-format.sh` | Auto-formats `.cs` files on save |
+| PostToolUse (Write\|Edit) | `post-format.sh` | Auto-formats `.cs` via dotnet format; `.ts/.html/.scss` via Prettier; `.ts` via ESLint |
 | PostToolUse (Write\|Edit) | `post-secret-scan.sh` | Warns on hardcoded secrets in any file |
 | PostToolUse (Write\|Edit) | `post-dotnet-security-scan.sh` | Warns on unsafe .NET APIs in `.cs` files |
+| PostToolUse (Write\|Edit) | `post-react-security-scan.sh` | Warns on XSS patterns in React/TS files |
 | PostToolUse (Write\|Edit\|Bash) | `post-audit-log.sh` | Appends every tool use to `~/.claude/audit.log` |
 | Stop | `stop-build-and-fix.sh` | Builds project; on failure calls Claude Haiku to fix and retries |
 
@@ -66,3 +67,4 @@ Run this after any hook edit, or run `/init` to do it automatically.
 |---|---|
 | `/init` | Verify and restore all hooks, scripts, and settings |
 | `/commit` | Interactive conventional commit with branch routing |
+| `/update-cortex` | Sync the `.claude` folder with the latest Cortex remote |
