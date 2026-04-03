@@ -1,0 +1,10 @@
+{
+  ".cs": ["dotnet/security-scan.sh", "dotnet/format.sh"],
+  ".ts": ["node/react-security-scan.sh", "node/format.sh"],
+  ".tsx": ["node/react-security-scan.sh"],
+  ".js": ["node/react-security-scan.sh"],
+  ".jsx": ["node/react-security-scan.sh"],
+  ".html": ["node/format.sh"],
+  ".scss": ["node/format.sh"],
+  "*": ["generic/secret-scan.sh"]
+}

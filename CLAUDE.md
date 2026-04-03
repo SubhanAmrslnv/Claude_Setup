@@ -10,36 +10,43 @@ This repo is the **Cortex framework** — a modular Claude DevOps configuration 
 
 ```
 CLAUDE.md                             ← this file; loaded every session
+.cortex/                              ← framework root (all logic lives here)
+  core/
+    hooks/
+      guards/
+        pre-guard.sh                  ← PreToolUse guard (blocks dangerous commands)
+      runtime/
+        post-format.sh                ← registry-driven formatter dispatcher (v2.0.0)
+        post-scan.sh                  ← registry-driven security scanner dispatcher (v2.0.0)
+        post-audit-log.sh             ← appends every tool use to audit.log
+        stop-build.sh                 ← runs build, reports failures (no auto-fix)
+    runtime/
+      command-runner.sh               ← registry-driven command validator/dispatcher
+    scanners/
+      dotnet/
+        security-scan.sh              ← unsafe .NET API detection
+        format.sh                     ← dotnet format wrapper
+      node/
+        react-security-scan.sh        ← XSS pattern detection for JS/TS/JSX/TSX
+        format.sh                     ← Prettier + ESLint wrapper
+      generic/
+        secret-scan.sh                ← hardcoded secret detection (all file types)
+  commands/
+    commit.md                         ← full commit command implementation
+    doctor.md                         ← full doctor command implementation
+    init.md                           ← full init command implementation
+    update-cortex.md                  ← full update-cortex command implementation
+  registry/
+    hooks.json                        ← hook names, versions, source paths
+    commands.json                     ← discoverable command list
+    scanners.json                     ← extension→scanner mapping (flat format)
+  config/
+    cortex.config.json                ← framework configuration
+  base/                               ← remote Cortex content (updated by /update-cortex)
+  local/                              ← project-local overrides (never overwritten)
 .claude/
   settings.json                       ← adapter only: wires ~/.claude/hooks/* to Claude Code
-  commands/                           ← slash commands (/init, /commit, /doctor, /update-cortex)
-  .cortex/                            ← framework root (all logic lives here)
-    core/
-      hooks/
-        guards/
-          pre-guard.sh                ← PreToolUse guard (blocks dangerous commands)
-        runtime/
-          post-format.sh              ← dispatches formatting to language scanners
-          post-scan.sh                ← dispatches security scanning to language scanners
-          post-audit-log.sh           ← appends every tool use to audit.log
-          stop-build.sh               ← runs build, reports failures (no auto-fix)
-      scanners/
-        dotnet/
-          security-scan.sh            ← unsafe .NET API detection
-          format.sh                   ← dotnet format wrapper
-        node/
-          react-security-scan.sh      ← XSS pattern detection for JS/TS/JSX/TSX
-          format.sh                   ← Prettier + ESLint wrapper
-        generic/
-          secret-scan.sh              ← hardcoded secret detection (all file types)
-    registry/
-      hooks.json                      ← hook names, versions, source paths
-      commands.json                   ← discoverable command list
-      scanners.json                   ← language-to-scanner mapping
-    config/
-      cortex.config.json              ← framework configuration
-    base/                             ← remote Cortex content (updated by /update-cortex)
-    local/                            ← project-local overrides (never overwritten)
+  commands/                           ← thin wrappers; delegate to .cortex/commands/
 README.md
 INSTALL.md
 ```
@@ -69,17 +76,17 @@ Blocks dangerous Bash commands. Checks:
 - Exploit tools (`sqlmap`, `nmap`, `hydra`, `hashcat`, etc.)
 - Reverse shells, base64 execution, cron persistence, curl-pipe-to-shell
 
-**PostToolUse (`Write|Edit`)** — `post-format.sh`
-Detects file type; dispatches to `scanners/dotnet/format.sh` (`.cs`) or `scanners/node/format.sh` (`.ts/.html/.scss`).
+**PostToolUse (`Write|Edit`)** — `post-format.sh` (v2.0.0)
+Registry-driven: reads `.cortex/registry/scanners.json`, dispatches to all `format.sh` entries matching the file extension. No language-specific logic in the hook itself.
 
-**PostToolUse (`Write|Edit`)** — `post-scan.sh`
-Always runs `scanners/generic/secret-scan.sh`. Additionally dispatches to `scanners/dotnet/security-scan.sh` (`.cs`) or `scanners/node/react-security-scan.sh` (`.ts/.tsx/.js/.jsx`).
+**PostToolUse (`Write|Edit`)** — `post-scan.sh` (v2.0.0)
+Registry-driven: always runs the `*` wildcard scanners (generic secret scan), then dispatches to extension-specific security scanners from `.cortex/registry/scanners.json`. No language-specific logic in the hook itself.
 
 **PostToolUse (`Write|Edit|Bash`)** — `post-audit-log.sh`
 Appends every tool use to `~/.claude/audit.log`.
 
 **Stop** — `stop-build.sh`
-Runs directly from `.claude/.cortex/core/hooks/runtime/stop-build.sh` (not deployed to `~/.claude/hooks/`). Detects project type, runs the build, prints errors on failure. Does NOT auto-fix.
+Runs directly from `.cortex/core/hooks/runtime/stop-build.sh` (not deployed to `~/.claude/hooks/`). Detects project type, runs the build, prints errors on failure. Does NOT auto-fix.
 
 ---
 
@@ -87,33 +94,34 @@ Runs directly from `.claude/.cortex/core/hooks/runtime/stop-build.sh` (not deplo
 
 ### Editing hooks
 
-- Source of truth: `.claude/.cortex/core/hooks/`
-- Scanners: `.claude/.cortex/core/scanners/`
+- Source of truth: `.cortex/core/hooks/`
+- Scanners: `.cortex/core/scanners/`
 - `pre-guard.sh`, `post-format.sh`, `post-scan.sh`, `post-audit-log.sh` — deployed to `~/.claude/hooks/` by `/init`; run there at runtime
-- `stop-build.sh` — runs directly from `.claude/.cortex/core/hooks/runtime/`; not deployed anywhere; not in the hooks registry
+- `stop-build.sh` — runs directly from `.cortex/core/hooks/runtime/`; not deployed anywhere; not in the hooks registry
 - After editing any deployed hook or scanner, run `/init` — it version-compares and redeploys only outdated files
-- Test hooks manually: `bash .claude/.cortex/core/hooks/<subpath>/<hook>.sh` with a sample JSON payload on stdin
+- Test hooks manually: `bash .cortex/core/hooks/<subpath>/<hook>.sh` with a sample JSON payload on stdin
 - All deployed hooks carry a `# @version: X.Y.Z` tag on line 2 — increment when changing
 
 ### Hook versioning
 
-Hooks carry `# @version: X.Y.Z` in line 2. The registry at `.claude/.cortex/registry/hooks.json` tracks the expected version per hook. `/init` compares source vs runtime and updates only if source is newer.
+Hooks carry `# @version: X.Y.Z` in line 2. The registry at `.cortex/registry/hooks.json` tracks the expected version per hook. `/init` compares source vs runtime and updates only if source is newer.
 
 To release a hook update:
-1. Increment `# @version:` in the source file under `.claude/.cortex/core/hooks/`
-2. Update the matching version in `.claude/.cortex/registry/hooks.json`
+1. Increment `# @version:` in the source file under `.cortex/core/hooks/`
+2. Update the matching version in `.cortex/registry/hooks.json`
 3. Run `/init`
 
 ### Adding a new scanner
 
-1. Create the script under `.claude/.cortex/core/scanners/<language>/`
-2. Add it to `.claude/.cortex/registry/scanners.json`
-3. Wire it in the appropriate runtime hook (`post-scan.sh` or `post-format.sh`)
+1. Create the script under `.cortex/core/scanners/<language>/`
+2. Add it to `.cortex/registry/scanners.json` (flat extension→scanner-array format)
+3. No hook changes required — `post-scan.sh` and `post-format.sh` are registry-driven
 
 ### Adding a new command
 
-1. Create `<command>.md` in `.claude/commands/`
-2. Add the command name to `.claude/.cortex/registry/commands.json`
+1. Create `<command>.md` in `.cortex/commands/` with the full implementation
+2. Create a thin wrapper `<command>.md` in `.claude/commands/` delegating to the command-runner
+3. Add the command name to `.cortex/registry/commands.json`
 
 No other changes required — registry is the single source of truth.
 
@@ -122,6 +130,7 @@ No other changes required — registry is the single source of truth.
 - `.claude/settings.json` is the adapter layer only — it wires `~/.claude/hooks/*` to Claude Code events
 - After adding a new hook to the registry, add its wiring entry here
 - Hook paths always use `~/.claude/hooks/` (global runtime, not project-relative)
+- The Stop hook path points directly to `.cortex/core/hooks/runtime/stop-build.sh` (absolute path)
 
 ### Conventional commits (enforced by pre-guard.sh)
 

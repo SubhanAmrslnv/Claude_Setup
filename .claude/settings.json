@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/pre-guard.sh"
+            "command": "bash ~/.cortex/core/hooks/guards/pre-guard.sh"
           }
         ]
       }
@@ -17,11 +17,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/post-format.sh"
+            "command": "bash ~/.cortex/core/hooks/runtime/post-format.sh"
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/post-scan.sh"
+            "command": "bash ~/.cortex/core/hooks/runtime/post-scan.sh"
           }
         ]
       },
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/post-audit-log.sh"
+            "command": "bash ~/.cortex/core/hooks/runtime/post-audit-log.sh"
           }
         ]
       }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /c/Users/subhan.amiraslanov/Desktop/Claude/Cortex/.claude/.cortex/core/hooks/runtime/stop-build.sh"
+            "command": "bash ~/.cortex/core/hooks/runtime/stop-build.sh"
           }
         ]
       }
