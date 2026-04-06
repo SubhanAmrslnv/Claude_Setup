@@ -56,6 +56,20 @@ Check for:
 
 Only create `api.md` if real API surface is found.
 
+### Detect frontend
+
+Check for:
+- Page/view/screen files via Glob on `**/*Page*`, `**/*View*`, `**/*Screen*`, `**/pages/**`, `**/views/**`, `**/screens/**`
+- Router config via Glob on `**/router*`, `**/routes*`, `**/*routing*`
+- Request/response model files via Glob on `**/*Request*`, `**/*Response*`, `**/*Model*`, `**/*Dto*`, `**/*ViewModel*`
+- Component files via Glob on `**/components/**`, `**/*Component*`
+
+If frontend files are found, set `IS_FRONTEND=true`. Generate `documentation/frontend/` in Step 3.
+
+### Detect backend classes
+
+If the project is a backend, read all class files using Glob on `**/*.cs`, `**/*.java`, `**/*.py`, `**/*.ts`, `**/*.go`, etc. (filtered to exclude test files, `node_modules`, `obj`, `bin`). Set `IS_BACKEND=true`. Generate `documentation/backend/` in Step 3.
+
 ### Collect structural information
 
 Use Glob and Grep to find:
@@ -206,6 +220,72 @@ Only document endpoints confirmed by reading actual route/controller files. Do n
 
 ---
 
+### documentation/backend/
+
+**Only generate this section if the project is a backend (API, server-side application, or service).**
+
+Read all class files in the project. For each class found, generate one entry covering:
+
+**`documentation/backend/classes.md`**
+
+**Purpose:** Complete reference for every class in the backend codebase.
+
+For each class:
+1. **Class name and file path**
+2. **Purpose** — what this class is responsible for (one paragraph, derived from its fields, methods, and usage)
+3. **Type** — Controller / Service / Repository / Model / DTO / Middleware / Helper / Configuration / Other
+4. **Properties / Fields** — table with columns: Name, Type, Description
+5. **Methods / Actions** — table with columns: Method name, HTTP verb + route (if controller action), Parameters, Return type, Description
+6. **Dependencies** — other classes this class depends on (constructor injection, field injection, imports)
+7. **Used by** — which other classes call or depend on this class (find via Grep)
+
+Group classes by type (Controllers first, then Services, Repositories, Models, DTOs, others).
+
+Do not invent fields, methods, or relationships. Only document what is confirmed by reading the source files.
+
+---
+
+### documentation/frontend/
+
+**Only generate this section if the project is a frontend (SPA, web app, mobile app, or client-side application).**
+
+Read all page, component, model, and service files in the project. Generate the following files:
+
+**`documentation/frontend/pages.md`**
+
+**Purpose:** Reference for every page/screen in the frontend.
+
+For each page/screen:
+1. **Page name and file path**
+2. **Route / URL** — the route this page is registered at (derive from router config)
+3. **Purpose** — what this page does and who uses it
+4. **Components used** — list of child components rendered by this page
+5. **State / props** — key state variables and props with types and purpose
+6. **API calls made** — table with columns: Action/Method, HTTP verb + endpoint, When triggered, What it does with the response
+7. **Models used** — which request/response models this page binds to
+
+**`documentation/frontend/models.md`**
+
+**Purpose:** Reference for all data models, request models, and response models.
+
+For each model:
+1. **Model name and file path**
+2. **Type** — Request model / Response model / View model / Domain model / Form model
+3. **Fields** — table with columns: Name, Type, Required, Description
+4. **Used by** — which pages or services use this model (find via Grep)
+
+**`documentation/frontend/api-usage.md`**
+
+**Purpose:** Map every frontend page and component to the backend endpoints it calls.
+
+Structure as a table with columns:
+
+| Page / Component | HTTP Verb | Endpoint | Trigger | Purpose |
+
+List every API call confirmed by reading source files. Group by page. Do not invent calls.
+
+---
+
 ## STEP 4 — Output
 
 Write or update all applicable files using the Write or Edit tool.
@@ -215,3 +295,9 @@ Write or update all applicable files using the Write or Edit tool.
 - Do not output explanatory text. Only perform file operations.
 - Every file must contain only valid Markdown.
 - Do not generate files outside `documentation/`.
+
+**Conditional outputs:**
+- `IS_BACKEND=true` → write `documentation/backend/classes.md` (all classes, fields, methods, dependencies, callers)
+- `IS_FRONTEND=true` → write `documentation/frontend/pages.md`, `documentation/frontend/models.md`, `documentation/frontend/api-usage.md`
+- Both may be true for full-stack projects — generate both sets.
+- Update `documentation/README.md` index to include links to any new files generated.
