@@ -9,7 +9,7 @@
 | [Claude Code](https://claude.ai/code) | Yes | Runs the hooks and commands |
 | `bash` 4.0+ | Yes | All hook scripts |
 | `jq` | Yes | JSON parsing in every hook |
-| `node` 16+ | Yes | `post-code-intel.js` code intelligence hook |
+| `node` 16+ | Yes | `post-code-intel.sh` code intelligence hook |
 | `git` | Yes | Branch detection in pre-guard, commit command |
 
 Install `jq` if missing:
@@ -46,21 +46,45 @@ Or copy it to any stable location on your machine.
 
 ---
 
-## 2. Install to `~/.cortex/`
+## 2. Make Cortex available at runtime
 
-Cortex hooks run directly from `~/.cortex/core/hooks/`. Copy the framework there:
+Cortex resolves its runtime path dynamically via `CORTEX_ROOT`. Three options — pick one:
+
+### Option A — Global install (recommended for single-machine use)
 
 ```bash
 cp -r ~/cortex/.cortex ~/.cortex
 ```
 
-Or use a symlink to keep it in sync with the repo:
+Or use a symlink to keep it in sync with the repo without copying:
 
 ```bash
 ln -s ~/cortex/.cortex ~/.cortex
 ```
 
-> **Why `~/.cortex/`?** All hook paths in `settings.json` point to `~/.cortex/core/hooks/`. This keeps hooks accessible globally regardless of which project you open Claude Code in.
+With this option, hooks fall back to `$HOME/.cortex` automatically — no environment variable needed.
+
+### Option B — Project-local install
+
+Copy `.cortex/` into the project root alongside `.claude/`:
+
+```bash
+cp -r ~/cortex/.cortex /path/to/your/project/.cortex
+```
+
+When Claude Code opens in that project directory, hooks detect `$(pwd)/.cortex` and use it automatically.
+
+### Option C — Environment variable (CI/CD, Docker, custom paths)
+
+Set `CORTEX_ROOT` to the absolute path of the `.cortex/` directory:
+
+```bash
+export CORTEX_ROOT="/custom/path/to/.cortex"
+```
+
+Add this to your shell profile (`~/.bashrc`, `~/.zshrc`) or CI environment for persistent use.
+
+**Resolution priority:** `$CORTEX_ROOT` env var → `$(pwd)/.cortex` → `$HOME/.cortex`
 
 ---
 
@@ -72,7 +96,7 @@ Copy the adapter layer into the root of each project where you want Cortex activ
 cp -r ~/cortex/.claude /path/to/your/project/
 ```
 
-This folder contains only the hook wiring (`settings.json`) and thin command wrappers. It contains no framework logic — everything runs from `~/.cortex/`.
+This folder contains only the hook wiring (`settings.json`) and thin command wrappers. It contains no framework logic — everything runs from the path resolved by CORTEX_ROOT.
 
 ---
 
@@ -85,7 +109,6 @@ Open Claude Code in your project directory and run:
 ```
 
 `/init-cortex` will:
-- Write `~/.claude/cortex.env` with the resolved `CORTEX_ROOT` path (required by all hooks and commands)
 - Version-compare each hook source vs runtime, deploy only what changed
 - Validate `settings.json` wiring against the registry
 - Validate all command and scanner registries
@@ -132,28 +155,6 @@ This command:
 
 ---
 
-## 8. Additional commands
-
-**Impact analysis** — trace changed files through the dependency graph and assign a risk level before merging:
-
-```
-/impact
-/impact --staged
-/impact --since=main --deep
-```
-
-**Regression detection** — save a baseline and compare future states against it:
-
-```
-/regression --save        # capture current state as baseline
-/regression               # compare current state against baseline
-/regression --reset       # start fresh
-```
-
-See `README.md` for full flag reference and output format.
-
----
-
 ## 7. Local overrides
 
 To customize Cortex behavior for a specific project without modifying the base framework:
@@ -162,23 +163,51 @@ Place your overrides in `.cortex/local/`. These files are never modified by `/up
 
 ---
 
+## 8. Available commands
+
+### Core
+
+| Command | Flags | Description |
+|---|---|---|
+| `/init-cortex` | — | Deploy hooks, validate registry and settings |
+| `/doctor` | `--fix` `--deep` `--dry-run` | Full system diagnostics |
+| `/update-cortex` | — | Fetch and apply framework updates |
+| `/commit` | — | Interactive conventional commit with auto-generated message |
+
+### Analysis
+
+| Command | Flags | Description |
+|---|---|---|
+| `/impact` | `--staged` `--deep` `--since=<ref>` | Trace changed files through the dependency graph; assign risk level |
+| `/regression` | `--save` `--reset` `--since=<ref>` `--deep` | Compare current state against a saved diagnostic baseline |
+| `/hotspot` | `--since=<ref>` `--top=<n>` `--deep` | Score files by change frequency, size, and deps; surface risk areas |
+| `/pr-check` | `--branch=<name>` `--staged` `--skip-build` `--skip-tests` | Simulate full PR validation before submitting |
+| `/pattern-drift` | `--since=<ref>` `--deep` `--layer=<name>` | Detect deviations from dominant project coding patterns |
+| `/optimize` | `--file=<path>` `--lang=<lang>` `--focus=perf\|clarity` | Optimize code for performance and readability |
+| `/overengineering-check` | `--file=<path>` `--since=<ref>` `--deep` | Detect unnecessary abstractions and complexity |
+| `/timeline` | `--file=<path>` `--module=<dir>` `--depth=<n>` `--since=<date>` | Analyze a file's evolution and classify its stability |
+
+See `README.md` for full flag reference, output format, and risk level tables.
+
+---
+
 ## Architecture
 
 ```
-~/.cortex/core/hooks/guards/    ← PreToolUse, PermissionRequest, PermissionDenied hooks
-~/.cortex/core/hooks/runtime/   ← PostToolUse, PostToolUseFailure, Notification, TaskCreated/Completed, Stop, SessionStart, UserPromptSubmit hooks
-~/.cortex/core/scanners/        ← 25 language directories; mappings in registry/scanners.json
-~/.cortex/registry/             ← hooks.json, scanners.json, commands.json
-~/.cortex/commands/             ← full command implementations
-~/.cortex/cache/                ← generated project-profile.json (written by session-start)
-~/.cortex/base/                 ← remote framework snapshot (auto-updated)
-~/.cortex/local/                ← your project overrides (never auto-updated)
+$CORTEX_ROOT/core/hooks/guards/    ← PreToolUse, PermissionRequest, PermissionDenied hooks
+$CORTEX_ROOT/core/hooks/runtime/   ← PostToolUse, PostToolUseFailure, Notification, TaskCreated/Completed, Stop, SessionStart, UserPromptSubmit hooks
+$CORTEX_ROOT/core/scanners/        ← 25 language directories; mappings in registry/scanners.json
+$CORTEX_ROOT/registry/             ← hooks.json, scanners.json, commands.json
+$CORTEX_ROOT/commands/             ← full command implementations
+$CORTEX_ROOT/cache/                ← generated project-profile.json (written by session-start)
+$CORTEX_ROOT/base/                 ← remote framework snapshot (auto-updated)
+$CORTEX_ROOT/local/                ← your project overrides (never auto-updated)
 
-<project>/.claude/settings.json ← wires ~/.cortex/core/hooks/* to Claude Code events
-<project>/.claude/commands/     ← thin wrappers; delegate to ~/.cortex/commands/
+<project>/.claude/settings.json   ← wires ${CORTEX_ROOT:-$HOME/.cortex}/core/hooks/* to Claude Code events
+<project>/.claude/commands/        ← thin wrappers; delegate to $CORTEX_ROOT/commands/
 ```
 
-The `.claude/` folder in your project contains no business logic. All logic runs from `~/.cortex/`.
+CORTEX_ROOT defaults to `~/.cortex` when no env var or project-local `.cortex/` is present.
 
 ---
 
