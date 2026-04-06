@@ -21,7 +21,7 @@ CLAUDE.md                             ← this file; loaded every session
         post-format.sh                ← registry-driven formatter dispatcher (v2.1.0)
         post-scan.sh                  ← registry-driven security scanner dispatcher (v2.1.0)
         post-audit-log.sh             ← appends every tool use to audit.log
-        post-code-intel.js            ← PostToolUse code intelligence (Node.js)
+        post-code-intel.sh            ← PostToolUse code intelligence (Node.js)
         stop-build.sh                 ← runs build, reports failures (no auto-fix)
         session-start.sh              ← SessionStart project profiler
         prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine
@@ -104,7 +104,7 @@ Registry-driven: reads `.cortex/registry/scanners.json`, dispatches to all `form
 **PostToolUse (`Write|Edit`)** — `runtime/post-scan.sh` (v2.1.0)
 Registry-driven: always runs the `*` wildcard scanners (generic secret scan), then dispatches to extension-specific security scanners.
 
-**PostToolUse (`Write|Edit`)** — `runtime/post-code-intel.js` (v1.0.0, Node.js)
+**PostToolUse (`Write|Edit`)** — `runtime/post-code-intel.sh` (v1.0.0, Node.js)
 Analyzes modified `.cs .js .ts .jsx .tsx` files (≤1MB). Four checks:
 - **Complexity** — methods >50 lines (brace-depth tracking); nesting depth >3
 - **Duplication** — sliding 8-line window MD5 comparison
@@ -166,7 +166,7 @@ Hook paths in `settings.json` always use `~/.cortex/core/hooks/<subdir>/<filenam
 
 - `.claude/settings.json` is the adapter layer only — it wires hook scripts to Claude Code events
 - All hook paths use `~/.cortex/core/hooks/<subdir>/<filename>` (direct source paths, not a deployment copy)
-- Node.js hooks (`post-code-intel.js`) use `node ~/.cortex/core/hooks/runtime/<filename>`
+- Node.js hooks (`post-code-intel.sh`) use `node ~/.cortex/core/hooks/runtime/<filename>`
 - The Stop hook points to `~/.cortex/core/hooks/runtime/stop-build.sh`
 
 ### Conventional commits (enforced by pre-guard.sh)

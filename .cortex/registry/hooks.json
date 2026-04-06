@@ -31,8 +31,20 @@
     "version": "1.1.0",
     "source": "core/hooks/runtime/session-start.sh"
   },
-  "post-code-intel.js": {
+  "post-code-intel.sh": {
     "version": "1.0.0",
-    "source": "core/hooks/runtime/post-code-intel.js"
+    "source": "core/hooks/runtime/post-code-intel.sh"
+  },
+  "post-error-analyzer.sh": {
+    "version": "1.0.0",
+    "source": "core/hooks/runtime/post-error-analyzer.sh"
+  },
+  "notification.sh": {
+    "version": "1.0.0",
+    "source": "core/hooks/runtime/notification.sh"
+  },
+  "task-tracker.sh": {
+    "version": "1.0.0",
+    "source": "core/hooks/runtime/task-tracker.sh"
   }
 }

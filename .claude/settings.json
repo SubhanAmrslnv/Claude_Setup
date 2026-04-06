@@ -25,7 +25,7 @@
           },
           {
             "type": "command",
-            "command": "node ~/.cortex/core/hooks/runtime/post-code-intel.js"
+            "command": "bash ~/.cortex/core/hooks/runtime/post-code-intel.sh"
           }
         ]
       },
@@ -85,6 +85,46 @@
           {
             "type": "command",
             "command": "bash ~/.cortex/core/hooks/guards/permission-denied.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.cortex/core/hooks/runtime/post-error-analyzer.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.cortex/core/hooks/runtime/notification.sh"
+          }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.cortex/core/hooks/runtime/task-tracker.sh"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.cortex/core/hooks/runtime/task-tracker.sh"
           }
         ]
       }

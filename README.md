@@ -11,7 +11,7 @@ Covers intelligent prompt optimization, session profiling, risk-scored security 
 |---|---|---|
 | `jq` | **Yes** | JSON parsing in every hook — without it all hooks silently no-op |
 | `bash` 4.0+ | Yes | All hook scripts |
-| `node` 16+ | Yes | `post-code-intel.js` code intelligence |
+| `node` 16+ | Yes | `post-code-intel.sh` code intelligence |
 | `git` | Yes | Branch detection, commit guard |
 | [Claude Code](https://claude.ai/code) | Yes | Hook and command runtime |
 
@@ -48,7 +48,7 @@ Verify: `jq --version`
         post-format.sh                ← registry-driven formatter dispatcher (v2.1.0)
         post-scan.sh                  ← registry-driven security scanner dispatcher (v2.1.0)
         post-audit-log.sh             ← audit logger
-        post-code-intel.js            ← code intelligence analyzer (Node.js)
+        post-code-intel.sh            ← code intelligence analyzer (Node.js)
         stop-build.sh                 ← build failure reporter
         session-start.sh              ← SessionStart project profiler
         prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine
@@ -98,7 +98,7 @@ All hooks run directly from `~/.cortex/core/hooks/`. Hook paths in `settings.jso
 | `UserPromptSubmit` | `runtime/prompt-optimizer.sh` | Detects intent, finds relevant files, extracts code snippets, outputs structured prompt |
 | `PostToolUse (Write\|Edit)` | `runtime/post-format.sh` | Registry-driven: dispatches to formatters by file extension |
 | `PostToolUse (Write\|Edit)` | `runtime/post-scan.sh` | Registry-driven: dispatches to security scanners by file extension |
-| `PostToolUse (Write\|Edit)` | `runtime/post-code-intel.js` | Analyzes modified files for complexity, duplication, naming, and structure issues |
+| `PostToolUse (Write\|Edit)` | `runtime/post-code-intel.sh` | Analyzes modified files for complexity, duplication, naming, and structure issues |
 | `PostToolUse (Write\|Edit\|Bash)` | `runtime/post-audit-log.sh` | Appends every tool use to `~/.claude/audit.log` |
 | `Stop` | `runtime/stop-build.sh` | Builds project; prints errors on failure — does NOT auto-fix |
 
@@ -175,7 +175,7 @@ Intercepts every user prompt via the `UserPromptSubmit` hook (reads from stdin).
 
 ---
 
-### Code Intelligence (`post-code-intel.js`)
+### Code Intelligence (`post-code-intel.sh`)
 
 Runs after every `Write` or `Edit` on `.cs .js .ts .jsx .tsx` files ≤ 1MB. Four lightweight regex-based checks:
 
