@@ -100,6 +100,21 @@ INSTALL.md
 
 ---
 
+## Global vs. Per-Project Activation
+
+Installing Cortex globally (`~/.cortex`) makes the framework available machine-wide, but **does not automatically activate it in any project.**
+
+Global install does NOT automatically activate Cortex in all projects.
+
+Each project needs a `.claude/` folder to wire hooks and commands into Claude Code. Without it, nothing loads.
+
+**To activate Cortex in a project:**
+1. Install `.cortex` to `~/.cortex`
+2. Copy `.claude/` into the project root
+3. Run `/init-cortex`
+
+---
+
 ## CORTEX_ROOT Dynamic Resolution
 
 All hooks and `settings.json` resolve the framework path dynamically. No file depends on a hardcoded path. Resolution order:

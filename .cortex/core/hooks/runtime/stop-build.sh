@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# @version: 1.1.1
+# @version: 1.1.2
 # Stop hook — detects project type, runs the build, and reports failures.
 # Does NOT auto-fix. On failure: print errors, suggest manual review, exit 1.
 
 set -uo pipefail
 
-if [ -z "$CORTEX_ROOT" ]; then
+if [ -z "${CORTEX_ROOT:-}" ]; then
   if [ -d "$(pwd)/.cortex" ]; then
     export CORTEX_ROOT="$(pwd)/.cortex"
   else

@@ -36,6 +36,21 @@ Verify: `jq --version` — expected output: `jq-1.7.x` or later.
 
 ---
 
+## Global vs. Per-Project Activation
+
+Installing Cortex globally (`~/.cortex`) makes the framework available on your machine, but **does not automatically activate it in any project.**
+
+Global install does NOT automatically activate Cortex in all projects.
+
+Each project requires a `.claude/` folder to wire Cortex into Claude Code. Without it, hooks and commands are not loaded regardless of where `.cortex` is installed.
+
+**To activate Cortex in a project:**
+1. Install `.cortex` to `~/.cortex` (global) or into the project root (local)
+2. Copy `.claude/` into the project root
+3. Run `/init-cortex` inside that project
+
+---
+
 ## 1. Clone the Cortex repository
 
 ```bash
