@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 2.1.0
+# @version: 2.1.1
 # PreToolUse advanced guard — risk-scoring engine.
 # Scores the incoming Bash command across 5 risk categories + branch context,
 # then blocks (exit 1), warns (exit 0 + JSON), or allows silently.
@@ -9,6 +9,13 @@
 #   risk 30-69 → allow with warning
 #   risk ≥ 70  → block
 
+if [ -z "$CORTEX_ROOT" ]; then
+  if [ -d "$(pwd)/.cortex" ]; then
+    export CORTEX_ROOT="$(pwd)/.cortex"
+  else
+    export CORTEX_ROOT="$HOME/.cortex"
+  fi
+fi
 command -v jq &>/dev/null || exit 0
 
 input=$(cat)

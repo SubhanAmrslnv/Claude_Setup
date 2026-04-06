@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
-# @version: 1.1.0
+# @version: 1.1.1
 # PostToolUse code intelligence — analyzes modified files for complexity,
 # duplication, naming, and structure issues. Read-only; never modifies files.
 
+if [ -z "$CORTEX_ROOT" ]; then
+  if [ -d "$(pwd)/.cortex" ]; then
+    export CORTEX_ROOT="$(pwd)/.cortex"
+  else
+    export CORTEX_ROOT="$HOME/.cortex"
+  fi
+fi
 command -v jq &>/dev/null || exit 0
 
 input=$(cat)

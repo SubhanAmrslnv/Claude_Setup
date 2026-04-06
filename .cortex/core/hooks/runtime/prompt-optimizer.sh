@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# @version: 1.1.0
+# @version: 1.1.1
 # UserPromptSubmit optimizer — analyzes prompt, detects intent, finds relevant
 # files (function-level snippets only), injects minimal context, outputs a
 # structured prompt. Exits 0 silently on any failure to avoid blocking input.
 
+if [ -z "$CORTEX_ROOT" ]; then
+  if [ -d "$(pwd)/.cortex" ]; then
+    export CORTEX_ROOT="$(pwd)/.cortex"
+  else
+    export CORTEX_ROOT="$HOME/.cortex"
+  fi
+fi
 command -v jq &>/dev/null || exit 0
 
 # UserPromptSubmit delivers payload via stdin, not $TOOL_INPUT
