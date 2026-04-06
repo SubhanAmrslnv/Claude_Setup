@@ -1,77 +1,128 @@
-Safely update the Cortex base layer in this project while preserving local overrides.
+# /update-cortex — Safe Framework Update System
 
-CONTEXT:
-- `.cortex/base/` contains the canonical framework files pulled from the remote Cortex repository.
-- `.cortex/local/` contains project-specific overrides and must NEVER be modified.
-- The remote Cortex repository URL is: https://github.com/SubhanAmrslnv/Cortex.git
+## STEP 1 — Verify .cortex structure
 
-## Step 1 — Verify .cortex structure
+Check that `.cortex/base/` exists in the current working directory.
 
-Check that `.cortex/base/` exists in the current project.
+### Case A — .cortex/base/ does not exist
 
-- If `.cortex/base/` does NOT exist:
-  - Clone Cortex into `.cortex/base/`: `git clone https://github.com/SubhanAmrslnv/Cortex.git .cortex/base`
-  - Skip to Step 4.
+Clone Cortex into `.cortex/base/`:
+```
+git clone https://github.com/SubhanAmrslnv/Cortex.git .cortex/base
+```
 
-- If `.cortex/base/` exists but is not a git repository:
-  - Stop. Report: "ERROR: .cortex/base/ exists but is not a git repository. Delete it manually and re-run /update-cortex."
-  - Do not delete automatically.
+If clone fails:
+```
+[FAIL]
 
-## Step 2 — Fetch remote changes
+TYPE: ERROR
+TITLE: Clone failed
+DETAILS: git clone exited non-zero — remote may be unreachable or URL is incorrect
+WHY: cannot update .cortex/base/ without a valid clone
+FIX: verify network access and that https://github.com/SubhanAmrslnv/Cortex.git is reachable, then re-run /update-cortex
+```
+Stop.
+
+Skip to Step 4.
+
+### Case B — .cortex/base/ exists but is NOT a git repository
+
+```
+[FAIL]
+
+TYPE: ERROR
+TITLE: .cortex/base/ is not a git repository
+DETAILS: .cortex/base/ exists but contains no .git/ directory
+WHY: git fetch cannot run in a non-repository directory — updates cannot be pulled
+FIX: delete .cortex/base/ manually, then re-run /update-cortex
+```
+Stop. Do NOT delete automatically.
+
+---
+
+## STEP 2 — Fetch remote changes
 
 Inside `.cortex/base/`, run:
-
 ```
 git fetch origin
 ```
 
-If fetch fails, stop and report the error.
+If fetch fails:
+```
+[FAIL]
 
-## Step 3 — Show diff and require confirmation
+TYPE: ERROR
+TITLE: Fetch failed
+DETAILS: git fetch origin exited non-zero in .cortex/base/
+WHY: cannot determine what has changed remotely without a successful fetch
+FIX: verify network access and git remote configuration in .cortex/base/, then re-run /update-cortex
+```
+Stop.
 
-Run: `git diff HEAD origin/main -- .`
+---
 
-If there are no changes: report "Already up to date — no changes from remote." and stop.
+## STEP 3 — Show diff and require confirmation
 
-If there are changes:
-- Display the diff to the user.
-- Ask: "Apply these changes to .cortex/base/? (yes/no)"
-- Wait for explicit user input.
-- If user says anything other than "yes": stop without modifying any files.
+Run inside `.cortex/base/`: `git diff HEAD origin/main -- .`
 
-## Step 4 — Apply update
+If no changes:
+```
+[PASS]
+
+Already up to date — no changes from remote.
+```
+Stop.
+
+If there are changes: display the full diff to the user.
+
+Ask exactly:
+> "Apply these changes to .cortex/base/? (yes/no)"
+
+Wait for explicit user input. If the answer is anything other than `yes`: stop without modifying any files. Print: `Update cancelled — no changes made.`
+
+---
+
+## STEP 4 — Apply update
 
 Inside `.cortex/base/`, run:
-
 ```
 git reset --hard origin/main
 ```
 
 Do NOT touch `.cortex/local/` at any point.
-Do NOT overwrite `.claude/` or any other project files.
+Do NOT overwrite `.claude/` or any other project files outside `.cortex/base/`.
 
-## Step 5 — Run /init
+If merge conflicts arise during any git operation: DO NOT auto-resolve. Present the conflicting hunks to the user and wait for explicit instructions. Never pick a side or discard changes without user approval.
 
-After updating base, run `/init` to redeploy any updated hooks to `~/.claude/hooks/` using version-aware deployment.
+---
 
-## Step 6 — Report
+## STEP 5 — Run /init automatically
+
+After the base update completes, run `/init` immediately.
+
+Do NOT ask the user whether to run it — this is mandatory after every update.
+
+---
+
+## STEP 6 — Report
+
+Print the overall status (`[PASS]`, `[WARN]`, or `[FAIL]`) based on the outcome.
+
+Then print:
 
 ```
 === UPDATE-CORTEX REPORT ===
+Generated: <timestamp>
 
 [BASE]
   Status:        UPDATED | CLONED | NO_CHANGE
   Latest commit: <hash> — <message>
 
-[HOOKS REDEPLOYED]
-  <hook-name>    UPDATED | SKIPPED | WARNING
-  ...
-
 [LOCAL OVERRIDES]
   .cortex/local/ preserved — untouched
+
+[HOOKS REDEPLOYED]
+  (output from /init below)
 ```
 
-CONFLICT HANDLING:
-- If any merge conflicts arise, DO NOT auto-resolve them.
-- Present the conflicting hunks to the user and wait for explicit instructions.
-- Never pick a side or discard changes without user approval.
+Follow with the full /init report output.

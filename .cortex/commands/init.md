@@ -1,93 +1,190 @@
-Initialize the global Claude Code configuration for this machine.
+# /init — Cortex Environment Setup and Hook Deployment
 
-Perform the following steps in order.
+## MODE DETECTION
 
-## Step 1 — Resolve Cortex root
+Parse `$ARGUMENTS` for flags:
+- `--force` → redeploy ALL hooks regardless of version
+- `--dry-run` → simulate all actions; print what would be done; apply nothing
+
+Flags may be combined.
+
+---
+
+## STEP 1 — Resolve CORTEX_ROOT
 
 Determine the absolute path to this Cortex repository (the directory containing `.cortex/`). Save it as `CORTEX_ROOT`.
 
+If `CORTEX_ROOT` cannot be resolved (not in a Cortex repo):
+```
+[FAIL]
+
+TYPE: ERROR
+TITLE: CORTEX_ROOT not resolvable
+DETAILS: the current working directory does not contain a .cortex/ folder
+WHY: /init must run from inside the Cortex repository
+FIX: cd to the Cortex repository root and re-run /init
+```
+Stop.
+
 Write the following to `~/.claude/cortex.env` (create or overwrite):
-
 ```
-export CORTEX_ROOT="<absolute-path-to-cortex-repo>"
+export CORTEX_ROOT="<absolute-path>"
 ```
 
-Confirm the write succeeded.
+If `--dry-run`: print `[DRY-RUN] Would write CORTEX_ROOT=<path> to ~/.claude/cortex.env` and skip the write.
 
-## Step 2 — Verify hooks directory
+---
 
-Check that `~/.claude/hooks/` exists. If not, run: `mkdir -p ~/.claude/hooks`
+## STEP 2 — Ensure hooks directory
 
-## Step 3 — Version-aware hook deployment
+Check that `~/.claude/hooks/` exists.
+
+If not and `--dry-run`: print `[DRY-RUN] Would create ~/.claude/hooks/`
+
+If not and not `--dry-run`: run `mkdir -p ~/.claude/hooks`
+
+---
+
+## STEP 3 — Version-aware hook deployment
 
 Read `$CORTEX_ROOT/.cortex/registry/hooks.json`.
 
+If missing:
+```
+[FAIL]
+
+TYPE: ERROR
+TITLE: hooks.json not found
+DETAILS: $CORTEX_ROOT/.cortex/registry/hooks.json does not exist
+WHY: hook registry is required — cannot determine which hooks to deploy
+FIX: restore hooks.json from the Cortex source repo
+```
+Stop.
+
 For each entry (hook name + `source` path):
 
-a. Resolve source file: `$CORTEX_ROOT/.cortex/<source>`
-b. Resolve runtime file: `~/.claude/hooks/<hook-name>`
-c. Extract source version: read the source file, find the first line matching `^# @version:`, extract the version string (e.g. `1.0.0`). If absent, treat as `0.0.0`.
-d. Extract runtime version: if the runtime file exists, do the same. If the file is absent, treat as `0.0.0`.
-e. Compare versions — compare major, then minor, then patch as integers:
-   - source > runtime OR runtime does not exist → copy source to runtime; record as DEPLOYED or UPDATED
-   - source == runtime → record as SKIPPED (up to date)
-   - source < runtime → do NOT overwrite; record as WARNING (runtime ahead of source)
+a. Resolve source: `$CORTEX_ROOT/.cortex/<source>`
+b. Resolve runtime: `~/.claude/hooks/<hook-name>`
+c. Extract source version from `# @version: X.Y.Z` on line 1 or 2. If absent, treat as `0.0.0`.
+d. If runtime file exists, extract its version the same way. If absent, treat as `0.0.0`.
+e. Compare versions (major, minor, patch as integers):
 
-## Step 4 — Validate settings.json
+**`--force` mode**: always redeploy regardless of version comparison.
 
-Check that `~/.claude/settings.json` exists and contains a `hooks` block wiring each hook in hooks.json via `bash ~/.claude/hooks/<hook-name>`.
+**Normal mode**:
+- source > runtime OR runtime absent → deploy
+- source == runtime → skip (up to date)
+- source < runtime → skip and add a WARNING
 
-- Missing file → copy from `$CORTEX_ROOT/.claude/settings.json`; record as COPIED
-- File exists, all hooks wired → OK
-- File exists, some entries missing → report which entries are absent; do not auto-merge; record as INCOMPLETE
+Deployment (if not `--dry-run`): copy source to runtime exactly.
 
-## Step 5 — Validate command registry
+Record each hook as one of: `DEPLOYED` | `UPDATED` | `SKIPPED` | `WARNING`
+
+---
+
+## STEP 4 — Validate settings.json
+
+Read `~/.claude/settings.json`.
+
+If missing and not `--dry-run`: copy from `$CORTEX_ROOT/.claude/settings.json`, record as `COPIED`.
+If missing and `--dry-run`: print `[DRY-RUN] Would copy settings.json from $CORTEX_ROOT/.claude/settings.json`.
+
+If present: for each hook name in hooks.json, verify a `command` entry referencing `~/.claude/hooks/<hook-name>` exists in the hooks block.
+
+For each absent entry, record as `INCOMPLETE` with the specific hook name missing.
+
+Do not auto-merge a partial settings.json — report the missing entries and instruct the user to add them from `$CORTEX_ROOT/.claude/settings.json`.
+
+---
+
+## STEP 5 — Validate command registry
 
 Read `$CORTEX_ROOT/.cortex/registry/commands.json`.
 
-For each name in the `commands` array, check that `$CORTEX_ROOT/.claude/commands/<name>.md` exists.
+For each name in `commands`, check `$CORTEX_ROOT/.claude/commands/<name>.md` exists.
 
-- Present: OK
-- Missing: record ERROR
+Record each as `OK` or `ERROR`.
 
-## Step 6 — Validate scanner availability
+---
+
+## STEP 6 — Validate scanner availability
 
 Read `$CORTEX_ROOT/.cortex/registry/scanners.json`.
 
-For each extension key (excluding `*`), verify every scanner path in its array exists at `$CORTEX_ROOT/.cortex/core/scanners/<path>`.
+For each extension key (excluding `*`), for each scanner path in its array, check `$CORTEX_ROOT/.cortex/core/scanners/<path>` exists.
 
-- Present: OK
-- Missing: record WARNING
+Record each as `OK` or `WARNING (missing)`.
 
-## Step 7 — Print summary report
+---
+
+## STEP 7 — Validate hook registry consistency
+
+For each hook in hooks.json, verify the version in hooks.json matches the `# @version:` tag in the source file.
+
+If mismatched:
+```
+TYPE: WARNING
+TITLE: Registry version mismatch: <hook-name>
+DETAILS: hooks.json declares <registry_ver> but source file contains <source_ver>
+WHY: /init version comparison uses the registry — a mismatch causes incorrect deployment decisions
+FIX: update the version field for <hook-name> in hooks.json to match the source file
+```
+
+---
+
+## OUTPUT
+
+Print the overall status (`[PASS]`, `[WARN]`, or `[FAIL]`) based on highest severity found.
+
+Then print the structured report:
 
 ```
 === CORTEX INIT REPORT ===
+Mode: <default | --force | --dry-run | --force --dry-run>
+Generated: <timestamp>
 
 [CORTEX_ROOT]
   Path:       <resolved path>
-  cortex.env: written
+  cortex.env: written | skipped (dry-run)
 
 [HOOKS]
-  <hook-name>    DEPLOYED | UPDATED | SKIPPED | WARNING    <version detail>
+  <hook-name>    DEPLOYED | UPDATED | SKIPPED | WARNING    source: <ver> runtime: <ver>
   ...
 
 [SETTINGS]
   ~/.claude/settings.json    OK | COPIED | INCOMPLETE
-  <detail if INCOMPLETE>
+  <if INCOMPLETE: list each missing hook entry>
 
 [COMMANDS]
   <command>    OK | ERROR
   ...
 
 [SCANNERS]
-  <extension>/<scanner>    OK | WARNING
+  <ext>/<scanner>    OK | WARNING
   ...
 
-[RESULT]
-  STATUS: OK | WARNING | ERROR
+[REGISTRY CONSISTENCY]
+  <hook-name>    OK | WARNING <detail>
+  ...
+
+STATUS: PASS | WARN | FAIL
 ```
 
-## Step 8 — Save memory
+For each issue, also print in structured format:
+```
+TYPE: ERROR | WARNING
+TITLE: <title>
+DETAILS: <details>
+WHY: <why>
+FIX: <fix>
+```
 
-Save or update a `project` memory recording which hooks were deployed/updated, the resolved CORTEX_ROOT, and overall status. Use memory file `init_state.md` under the project memory directory.
+---
+
+## SAVE STATE
+
+After completion, save or update a project memory in `init_state.md` recording:
+- Resolved `CORTEX_ROOT`
+- Which hooks were deployed/updated/skipped
+- Overall status
+- Timestamp

@@ -1,28 +1,48 @@
-You are acting as a senior code auditor. Run TWO diagnostic passes: Cortex system diagnostics, then project code diagnostics. DO NOT fix anything automatically. Report all issues, then ask the user for permission before touching any file.
+# /doctor — Cortex Diagnostic Engine
+
+## MODE DETECTION
+
+Parse `$ARGUMENTS` for flags:
+- `--fix` → auto-apply safe fixes without asking
+- `--deep` → run extended analysis (all scanners + architecture checks)
+- `--dry-run` → simulate all actions; print what would be done; apply nothing
+
+Flags may be combined. If no flags: read-only diagnostics only.
 
 ---
 
-# PHASE 1 — CORTEX SYSTEM DIAGNOSTICS
+## SETUP
 
-## Step 1 — Locate Cortex root
+Read `~/.claude/cortex.env` to extract `CORTEX_ROOT`.
 
-Read `~/.claude/cortex.env`.
+If missing:
+```
+[FAIL]
 
-- Missing: record ERROR "[CORTEX] cortex.env not found — run /init" and skip to Phase 1 Output.
-- Found: extract `CORTEX_ROOT`. Use it as the base for all Phase 1 paths.
+ERROR: cortex.env not found
+DETAILS: ~/.claude/cortex.env does not exist
+WHY: CORTEX_ROOT cannot be resolved — all Cortex checks will fail
+FIX: run /init
+```
+Stop immediately.
 
-Define these base paths for all checks below:
+Define:
 - `CORTEX_DIR` = `$CORTEX_ROOT/.cortex`
 - `HOOKS_SRC` = `$CORTEX_DIR/core/hooks`
 - `SCANNERS_SRC` = `$CORTEX_DIR/core/scanners`
 - `REGISTRY` = `$CORTEX_DIR/registry`
-- `CONFIG` = `$CORTEX_DIR/config`
 - `COMMANDS_DIR` = `$CORTEX_ROOT/.claude/commands`
 - `RUNTIME_HOOKS` = `~/.claude/hooks`
 
-## Step 2 — Folder structure check
+Collect all issues into a list. Track the highest severity seen (PASS → WARN → FAIL).
 
-Verify the following paths exist:
+---
+
+## PHASE 1 — CORTEX SYSTEM DIAGNOSTICS
+
+### CHECK 1 — Folder structure
+
+Verify each required path exists:
 
 | Path | Required |
 |---|---|
@@ -31,202 +51,292 @@ Verify the following paths exist:
 | `$CORTEX_DIR/core/scanners/` | YES |
 | `$CORTEX_DIR/registry/` | YES |
 | `$CORTEX_DIR/config/` | YES |
-| `$CORTEX_ROOT/.claude/commands/` | YES |
+| `$COMMANDS_DIR` | YES |
 
-Missing path → ERROR "[CORTEX] Required folder missing: <path>"
+For each missing path, add:
+```
+TYPE: ERROR
+TITLE: Required directory missing
+DETAILS: <path> does not exist
+WHY: Cortex cannot load hooks, scanners, or commands without this directory
+FIX: run /init to restore the Cortex directory structure
+```
 
-## Step 3 — Registry validation
+### CHECK 2 — commands.json
 
-Read and validate all three registry files.
+Read `$REGISTRY/commands.json`.
 
-### commands.json (`$REGISTRY/commands.json`)
+If missing:
+```
+TYPE: ERROR
+TITLE: commands.json not found
+DETAILS: $REGISTRY/commands.json does not exist
+WHY: command registry is required to validate command availability
+FIX: restore commands.json from .cortex/registry/commands.json in the Cortex source repo
+```
 
-- File missing → ERROR "[CORTEX] commands.json not found"
-- For each command name in the `commands` array: check `$COMMANDS_DIR/<name>.md` exists
-  - Missing → ERROR "[CORTEX] Command '<name>' in registry but .claude/commands/<name>.md not found"
+For each command name in the `commands` array, check `$COMMANDS_DIR/<name>.md` exists.
+If missing:
+```
+TYPE: ERROR
+TITLE: Command file missing: <name>
+DETAILS: $COMMANDS_DIR/<name>.md is listed in commands.json but does not exist on disk
+WHY: /name cannot be invoked — the command runner will exit non-zero
+FIX: create $COMMANDS_DIR/<name>.md delegating to $CORTEX_DIR/commands/<name>.md
+```
 
-### hooks.json (`$REGISTRY/hooks.json`)
+### CHECK 3 — hooks.json
 
-- File missing → ERROR "[CORTEX] hooks.json not found"
-- For each entry: check `$CORTEX_DIR/<source>` exists
-  - Missing → ERROR "[CORTEX] Hook source file missing: <source>"
-- Malformed entry (missing `version` or `source` field) → ERROR "[CORTEX] Malformed hooks.json entry: <key>"
+Read `$REGISTRY/hooks.json`.
 
-### scanners.json (`$REGISTRY/scanners.json`)
+If missing:
+```
+TYPE: ERROR
+TITLE: hooks.json not found
+DETAILS: $REGISTRY/hooks.json does not exist
+WHY: hook registry is required for version-aware deployment
+FIX: restore hooks.json from the Cortex source repo
+```
 
-- File missing → ERROR "[CORTEX] scanners.json not found"
-- For each extension key and each scanner path in its array: check `$CORTEX_ROOT/.cortex/core/scanners/<path>` exists
-  - Missing → WARNING "[CORTEX] Scanner file missing: <path>"
+For each entry in hooks.json:
 
-## Step 4 — Hook validation
+a. Check `source` and `version` fields exist. If either is absent:
+```
+TYPE: ERROR
+TITLE: Malformed hooks.json entry: <key>
+DETAILS: entry is missing the '<field>' field
+WHY: /init cannot deploy this hook without a valid source path and version
+FIX: add missing '<field>' field to the <key> entry in hooks.json
+```
+
+b. Check `$CORTEX_DIR/<source>` exists. If not:
+```
+TYPE: ERROR
+TITLE: Hook source file missing: <key>
+DETAILS: $CORTEX_DIR/<source> does not exist on disk
+WHY: hook cannot be deployed or validated without its source file
+FIX: restore <source> from the Cortex repository
+```
+
+### CHECK 4 — scanners.json
+
+Read `$REGISTRY/scanners.json`.
+
+If missing:
+```
+TYPE: ERROR
+TITLE: scanners.json not found
+DETAILS: $REGISTRY/scanners.json does not exist
+WHY: post-scan.sh and post-format.sh are registry-driven and cannot dispatch without this file
+FIX: restore scanners.json from the Cortex source repo
+```
+
+For each extension key (excluding `*`) and each scanner path in its array, check `$CORTEX_DIR/core/scanners/<path>` exists.
+If missing:
+```
+TYPE: WARNING
+TITLE: Scanner file missing: <path>
+DETAILS: <path> is mapped in scanners.json but $CORTEX_DIR/core/scanners/<path> does not exist
+WHY: files with extension <ext> will not be scanned — security issues or formatting errors may go undetected
+FIX: create the scanner script at $CORTEX_DIR/core/scanners/<path> or remove the mapping from scanners.json
+```
+
+### CHECK 5 — Hook deployment and version validation
 
 For each hook in hooks.json:
 
-a. Source exists at `$CORTEX_DIR/<source>`:
-   - Missing → ERROR "[CORTEX] Hook source not found: <source>"
+a. Read the source file at `$CORTEX_DIR/<source>`. Locate the line matching `^# @version:` (line 1 or 2). Extract the version string. If no version tag found, treat as `0.0.0` and add:
+```
+TYPE: WARNING
+TITLE: Hook missing version tag: <hook-name>
+DETAILS: $CORTEX_DIR/<source> has no '# @version: X.Y.Z' line
+WHY: /init cannot perform version-aware deployment — hook may be redeployed unnecessarily or skipped
+FIX: add '# @version: X.Y.Z' on line 2 of <source>
+```
 
-b. Deployed at `$RUNTIME_HOOKS/<hook-name>`:
-   - Missing → ERROR "[CORTEX] Hook not deployed: <hook-name> — run /init"
+b. Check if the deployed file `$RUNTIME_HOOKS/<hook-name>` exists. If not:
+```
+TYPE: ERROR
+TITLE: Hook not deployed: <hook-name>
+DETAILS: $RUNTIME_HOOKS/<hook-name> does not exist
+WHY: Claude Code cannot invoke this hook — the event it guards is unprotected
+FIX: run /init
+```
 
-c. Version tag `# @version: X.Y.Z` present in source (line 1 or 2):
-   - Missing → WARNING "[CORTEX] Hook has no version tag: <hook-name>"
+c. If deployed: read the runtime file's `# @version:` line. Compare source version vs runtime version (compare major, minor, patch as integers):
+- source > runtime:
+```
+TYPE: ERROR
+TITLE: Hook outdated in runtime: <hook-name>
+DETAILS: source version <src_ver> is newer than deployed version <rt_ver>
+WHY: the deployed hook is running old logic — security rules or formatting may be incorrect
+FIX: run /init
+```
+- source < runtime:
+```
+TYPE: WARNING
+TITLE: Runtime hook ahead of source: <hook-name>
+DETAILS: runtime version <rt_ver> is newer than source version <src_ver>
+WHY: deployed hook may contain untracked changes that will be lost on next /init
+FIX: update the source file at $CORTEX_DIR/<source> to match the runtime version, then increment the version tag
+```
 
-d. Version comparison (source vs runtime, semantic — compare major.minor.patch as integers):
-   - source == runtime → OK
-   - source > runtime → WARNING "[CORTEX] Hook outdated in runtime: <hook-name> (source: X, runtime: Y) — run /init"
-   - source < runtime → WARNING "[CORTEX] Runtime hook is ahead of source: <hook-name> (runtime: X, source: Y) — investigate"
+d. Check `stop-build.sh` exists at `$HOOKS_SRC/runtime/stop-build.sh`:
+```
+TYPE: ERROR
+TITLE: stop-build.sh missing
+DETAILS: $HOOKS_SRC/runtime/stop-build.sh does not exist
+WHY: the Stop hook will fail silently — build errors will not be reported after session end
+FIX: restore stop-build.sh from the Cortex source repo
+```
 
-Note: `stop-build.sh` is NOT in hooks.json and does NOT deploy to `~/.claude/hooks/` — it runs directly from `$HOOKS_SRC/runtime/stop-build.sh`. Verify it exists there; if missing, record ERROR "[CORTEX] stop-build.sh missing from .cortex/core/hooks/runtime/"
-
-## Step 5 — settings.json validation
+### CHECK 6 — settings.json wiring
 
 Read `~/.claude/settings.json`.
 
-- File missing → ERROR "[CORTEX] ~/.claude/settings.json not found"
-
-For each hook name in hooks.json, verify a `command` entry referencing `~/.claude/hooks/<hook-name>` exists in the settings hooks block:
-- Present → OK
-- Missing → ERROR "[CORTEX] Hook not wired in settings.json: <hook-name>"
-
-Verify the Stop hook entry points to `$HOOKS_SRC/runtime/stop-build.sh` (full absolute path):
-- Correct → OK
-- Pointing to `~/.claude/hooks/stop-build.sh` → ERROR "[CORTEX] Stop hook misconfigured — must point directly to .cortex path, not ~/.claude/hooks/"
-- Missing entirely → ERROR "[CORTEX] Stop hook missing from settings.json"
-
-For every `command` path in settings.json that references a file on disk, verify the file exists:
-- Missing → ERROR "[CORTEX] settings.json references missing file: <path>"
-
-Check for stale `.claude/.cortex/` references (old path pattern pointing into .claude directory):
-- Found → WARNING "[CORTEX] settings.json has stale .claude/.cortex/ reference — hooks now live in .cortex/"
-
-## Phase 1 Output
-
-Print:
-
+If missing:
 ```
-=== PHASE 1: CORTEX SYSTEM DIAGNOSTICS ===
-Generated: <timestamp>
+TYPE: ERROR
+TITLE: settings.json not found
+DETAILS: ~/.claude/settings.json does not exist
+WHY: no hooks are wired to Claude Code events — the entire Cortex runtime is inactive
+FIX: run /init
+```
 
-[FOLDER STRUCTURE]
-  .cortex/core/          OK | ERROR
-  .cortex/core/hooks/    OK | ERROR
-  .cortex/core/scanners/ OK | ERROR
-  .cortex/registry/      OK | ERROR
-  .cortex/config/        OK | ERROR
-  .claude/commands/      OK | ERROR
+For each hook name in hooks.json, verify a `command` entry referencing `~/.claude/hooks/<hook-name>` exists in the hooks block.
+If missing:
+```
+TYPE: ERROR
+TITLE: Hook not wired: <hook-name>
+DETAILS: settings.json has no command entry referencing ~/.claude/hooks/<hook-name>
+WHY: <hook-name> will never fire — its guarded events have no protection
+FIX: add the wiring entry for <hook-name> to ~/.claude/settings.json hooks block
+```
 
-[REGISTRY]
-  commands.json    OK | ERROR    <detail>
-  hooks.json       OK | ERROR    <detail>
-  scanners.json    OK | WARNING  <detail>
+Check the Stop hook entry points to `$HOOKS_SRC/runtime/stop-build.sh` (absolute path):
+- Points to `~/.claude/hooks/stop-build.sh` instead:
+```
+TYPE: ERROR
+TITLE: Stop hook misconfigured
+DETAILS: Stop hook points to ~/.claude/hooks/stop-build.sh — must point directly to .cortex source
+WHY: stop-build.sh is not deployed to ~/.claude/hooks/ — it runs from .cortex directly; this path will not resolve
+FIX: update the Stop hook command in settings.json to point to $HOOKS_SRC/runtime/stop-build.sh
+```
+- Missing entirely:
+```
+TYPE: ERROR
+TITLE: Stop hook missing from settings.json
+DETAILS: no Stop hook entry found in ~/.claude/settings.json
+WHY: build errors will not be surfaced after session end
+FIX: add a Stop hook entry pointing to $HOOKS_SRC/runtime/stop-build.sh
+```
 
-[HOOKS]
-  <hook-name>    OK | WARNING | ERROR    source: <ver> | runtime: <ver>
-  stop-build.sh  OK | ERROR              (direct, not deployed)
-  ...
-
-[SETTINGS]
-  <hook-name> wired    OK | ERROR
-  Stop hook path       OK | ERROR
-  ...
-
-CORTEX STATUS: OK | WARNING | ERROR
+Check for stale `.claude/.cortex/` references:
+```
+TYPE: WARNING
+TITLE: Stale hook path in settings.json
+DETAILS: settings.json contains a reference to .claude/.cortex/ — this is the old hook path pattern
+WHY: hooks no longer live under .claude/ — these references will not resolve
+FIX: replace all .claude/.cortex/ paths in settings.json with ~/.cortex/ paths
 ```
 
 ---
 
-# PHASE 2 — PROJECT CODE DIAGNOSTICS
+## PHASE 2 — PROJECT CODE DIAGNOSTICS
 
-## Step 6 — Identify project type
+### Identify project type
 
-Look at the working directory (the project root, NOT the Cortex repo itself). Determine what kind of project this is:
+Inspect the working directory (NOT the Cortex repo, NOT `.claude/`, `.cortex/`, or `.git/`).
 
-- `.sln` or `*.csproj` files present → .NET project
-- `package.json` present → Node/React project
-- Both → mixed project
-- Neither → generic (scan shell scripts, config files, markdown)
+- `.sln` or `*.csproj` present → .NET
+- `package.json` present → Node/React
+- Both → mixed
+- Neither → generic (shell scripts, config, markdown)
 
-Do NOT scan the `.claude/`, `.cortex/`, or `.git/` directories.
+### Select files to scan
 
-## Step 7 — Select files to scan
+.NET: `*.cs`, `*.csproj`
+Node/React: `*.ts`, `*.tsx`, `*.js`, `*.jsx`
+Generic: `*.sh`, `*.json`
 
-Based on project type, select files to scan. Be selective — do not read every file blindly.
+Skip: `node_modules/`, `bin/`, `obj/`, `dist/`, `*.lock`, `*.log`, `*.min.js`, `*.map`, `.cortex/`, `.claude/`, `.git/`
 
-For .NET: `*.cs`, `*.csproj`, `*.sln`
-For Node/React: `*.ts`, `*.tsx`, `*.js`, `*.jsx`, `*.json` (non-lockfiles)
-For generic/shell: `*.sh`, `*.json`, `*.md` (only those with logic)
+In `--deep` mode: also scan `*.json` (non-lock), `*.yaml`, `*.yml`, `*.env`.
 
-Skip: `node_modules/`, `bin/`, `obj/`, `dist/`, `*.lock`, `*.log`, `*.min.js`, `*.map`
+Use Glob to discover candidate files. Read only files needed to perform the checks below. Do not read files speculatively.
 
-Use Glob to discover files, then read only those relevant to the checks below. Do not read files speculatively.
+### Code checks
 
-## Step 8 — Run code diagnostics
+For every file read, perform these checks. Only report issues you can confirm from the file content — do not guess.
 
-For each file read, check for the following. Only report issues you can see with confidence — do not hallucinate.
+**Syntax / Runtime Risk**
+- Calling methods on a value that may be null/undefined without a null guard
+- Incorrect async/await usage: missing `await` on async call, unhandled promise rejection
+- Variables used before declaration
+- Wrong argument count/type for known APIs
 
-### 8a. Syntax / Runtime Risk
-- Unclosed blocks, mismatched brackets
-- Calling methods on potentially null/undefined values without guard
-- Incorrect async/await usage (missing await, unhandled promise)
-- Using variables before declaration
-- Misused built-in APIs (wrong argument types, deprecated usage)
+**Logical Bugs**
+- Conditions that are always true or always false
+- Empty catch blocks (swallowing exceptions silently)
+- Return paths that produce unexpected `undefined` or `null`
+- Dead code after `return` or `throw`
+- Missing `break` in switch/case where clearly unintentional
 
-### 8b. Logical Bugs
-- Conditions that can never be true or always be true
-- Off-by-one errors in loops
-- Missing `break` in switch/case (where unintentional)
-- Functions that silently swallow exceptions
-- Return paths that can produce `undefined`/`null` unexpectedly
-- Dead code (unreachable after return/throw)
-
-### 8c. Security Issues
-- Hardcoded credentials, API keys, tokens, passwords (not already caught by post-scan.sh)
-- Raw SQL string concatenation with user input
+**Security Issues**
+- Hardcoded credentials, API keys, tokens, connection strings
+- Raw SQL string concatenation with a variable (`"SELECT * FROM ... " + userInput`)
 - `eval()` or `innerHTML` with dynamic content
-- `Process.Start` or shell exec with unsanitized input
-- Sensitive data in logs
+- Shell exec / `Process.Start` with unsanitized input
+- Sensitive values written to logs
 
-### 8d. Code Quality Issues
-Only flag these if they represent a real risk or significant maintainability problem:
-- Functions longer than ~80 lines with no clear decomposition
-- Magic numbers/strings used in critical logic without constants
-- Obvious copy-paste duplication in logic paths (not just similar code)
-- Catch blocks that swallow all exceptions silently (empty catch, or catch that only logs)
+**Code Quality** (only flag if it represents a real risk)
+- Functions exceeding ~80 lines with no decomposition
+- Empty catch blocks that only log (error swallowed, caller not notified)
+- Obvious copy-paste duplication in critical logic paths
 
-### 8e. Naming / Typo Issues
-Only flag these if they could cause runtime errors or genuine confusion:
-- Variable or function names that are clear typos (e.g. `resposne`, `retun`)
-- Inconsistent casing in the same scope that could cause reference errors
-
-## Phase 2 Output
+**Architecture** (`--deep` only)
+- Direct database/repository access from a controller or UI component
+- Missing validation on any public API input parameter
+- Cross-layer dependency violations (UI importing data-access types directly)
 
 For each issue found:
-
 ```
-* [ERROR|WARNING|INFO] File: <relative/path/to/file>:<line>
-  Problem: <what is wrong>
-  Risk: <why it matters>
-  → Suggested Fix: <minimal safe change>
-```
-
-Then print:
-
-```
-PROJECT STATUS: OK | WARNING | ERROR
+TYPE: ERROR | WARNING | INFO
+TITLE: <short description>
+DETAILS: <file>:<line> — <what exactly is wrong>
+WHY: <technical reason this is a problem>
+FIX: <exact, single change to resolve this>
 ```
 
 ---
 
-# COMBINED SUMMARY
+## OUTPUT
 
-After both phases, print:
+### Header
 
+Print overall status based on highest severity found:
+- Any ERROR → `[FAIL]`
+- Any WARNING, no ERROR → `[WARN]`
+- No issues → `[PASS]`
+
+Then print all collected issues in order: ERRORs first, then WARNINGs, then INFOs.
+
+Format each issue as:
+```
+TYPE: ERROR | WARNING | INFO
+TITLE: <title>
+DETAILS: <details>
+WHY: <why>
+FIX: <fix>
+```
+
+Then print the summary box:
 ```
 ╔══════════════════════════════════════╗
 ║         DOCTOR REPORT SUMMARY        ║
 ╠══════════════════════════════════════╣
-║  CORTEX:  OK | WARNING | ERROR       ║
-║  PROJECT: OK | WARNING | ERROR       ║
+║  CORTEX:  PASS | WARN | FAIL         ║
+║  PROJECT: PASS | WARN | FAIL         ║
 ╠══════════════════════════════════════╣
 ║  Cortex issues:  <n>                 ║
 ║  Project issues: <n>                 ║
@@ -236,30 +346,25 @@ After both phases, print:
 
 ---
 
-# FIX MODE
+## FIX MODE
 
-After printing the summary, ask exactly:
+If `--fix` was provided:
 
-> "Do you want me to fix these issues? (yes / no)"
+For each fixable issue (those whose FIX is deterministic and safe):
+- Hook deployment issues → run `/init`
+- Missing executable permissions → `chmod +x <file>`
+- Stale path references in settings.json → apply Edit to correct the path
 
-Wait for explicit user input. Do not proceed until answered.
+If `--dry-run` is also present: print the proposed changes as diffs but apply nothing.
 
-**If NO:** Stop. Print "No changes made."
+If `--dry-run` is NOT present: apply fixes immediately, then print:
+```
+Fixed: <brief description of what was changed>
+```
 
-**If YES:** For each fixable issue, in order of severity (ERROR first):
+Do NOT auto-fix:
+- Code issues in project files (these require human review)
+- Registry corrections that require structural changes
+- Anything that modifies `.cortex/local/`
 
-1. Print the proposed change in diff-style format:
-   ```
-   File: <path>
-   - <old line(s)>
-   + <new line(s)>
-   ```
-2. Apply the fix using Edit (prefer) or Write only if full rewrite is necessary
-3. Print: "Fixed: <brief description>"
-
-Fix rules:
-- Fix ONLY the specific issue identified — nothing else in that file
-- Do NOT refactor, rename, or restructure surrounding code
-- Do NOT introduce new dependencies, patterns, or abstractions
-- If a fix requires understanding missing context (e.g., a missing file), skip it and note why
-- Cortex config issues (missing files, broken paths) → do not create files; report as "requires manual action"
+Do NOT ask the user for permission before fixing. Apply deterministic fixes silently.
