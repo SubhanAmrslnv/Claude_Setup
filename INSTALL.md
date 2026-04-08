@@ -45,20 +45,30 @@ C:\Users\subhan.amiraslanov\.claude\
 
 Both folders sit directly under `C:\Users\<your-username>\` — not inside any project, not inside any subfolder.
 
-**3. Add `.claude` to your project root:**
+**3. Add `.claude` and `.cortex` to your project root:**
 
-Each project that uses Cortex needs a `.claude` folder in its root directory. Copy the `.claude` folder from this repo into the root of your project:
+Each project that uses Cortex needs both a `.claude` and a `.cortex` folder in its root directory. Copy both folders from this repo into the root of your project:
 
 ```
 <your-project>/
   .claude/
     settings.json
     commands/
+  .cortex/
+    core/
+    commands/
+    registry/
+    config/
+    cache/
+    state/
 ```
 
-This is what activates Cortex for that project — it wires the hook bindings and slash commands into Claude Code. Without this folder, Cortex hooks and commands will not be available in the project.
+- `.claude/` wires the hook bindings and slash commands into Claude Code for the project.
+- `.cortex/` is the local framework install. When present, Cortex uses it instead of the global `~/.cortex/` fallback — giving you per-project control over hook versions, scanner config, and registry settings.
 
-> **Note:** The `.claude/` folder you copied to `C:\Users\<username>\` in step 2 covers global settings. The per-project `.claude/` folder activates Cortex commands and hooks for that specific project.
+Without both folders, Cortex hooks and commands will not be available in the project.
+
+> **Note:** The `.claude/` and `.cortex/` folders copied to `C:\Users\<username>\` in steps 1–2 act as the global fallback for machines or projects that don't carry their own copies. The per-project folders always take precedence.
 
 **4. Open the project in Claude Code and run:**
 
@@ -91,7 +101,7 @@ The `.claude/` folder wires Cortex into Claude Code by providing `settings.json`
 ## Summary
 
 1. Copy `.cortex` and `.claude` into `C:\Users\<username>\`
-2. Copy `.claude` into the root of each project you want Cortex active in
+2. Copy both `.claude` and `.cortex` into the root of each project you want Cortex active in
 3. Run `/init-cortex` once per project
 
-The global `.cortex/` install covers all projects on the machine. The per-project `.claude/` folder is what tells Claude Code to load Cortex hooks and commands for that project.
+The global `.cortex/` install acts as a fallback for machines or projects without a local copy. The per-project `.claude/` and `.cortex/` folders take precedence and give you version-pinned, project-isolated control over the full framework.
