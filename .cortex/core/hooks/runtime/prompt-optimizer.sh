@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.3.0
+# @version: 1.4.0
 # UserPromptSubmit optimizer — weighted intent, inverted file search,
 # scored relevance, function-aware snippets, structured output.
 # Exits 0 silently on any failure to avoid blocking input.
@@ -59,6 +59,11 @@ if [[ $max_score -gt 0 ]]; then
   fi
 fi
 
+# 3b. Intent override — keyword force (super speed hack: fixes mis-classification)
+if echo "$prompt" | grep -qiE 'fix|error|bug|exception'; then
+  intent="bug_fix"
+fi
+
 # 4. Keyword extraction
 STOP_WORDS='the|a|an|in|on|at|is|it|to|do|be|of|or|and|for|with|that|this|from|into|when|where|what|why|how|its|are|was|has|had|not|but|can|all|new|get|set|run|use|add|fix'
 
@@ -108,7 +113,7 @@ if [[ -n "$keywords" ]]; then
   kw_pattern=$(echo "$keywords" | paste -sd'|')
   while IFS= read -r f; do
     relevant_files+=("$f")
-  done < <(echo "$_all_code_files" | xargs -d'\n' grep -ilE "$kw_pattern" 2>/dev/null | head -5)
+  done < <(echo "$_all_code_files" | xargs -d'\n' grep -ilE "$kw_pattern" 2>/dev/null | head -3)
 fi
 
 # B. Stack trace: explicit file paths in prompt
@@ -131,7 +136,7 @@ mapfile -t deduped < <(
   printf '%s\n' "${relevant_files[@]}" \
   | sort -u \
   | while IFS= read -r f; do [[ -f "$f" ]] && echo "$f"; done \
-  | head -5
+  | head -3
 )
 
 # 6. Scored relevance — pick highest-frequency occurrence, not first match
@@ -169,7 +174,7 @@ extract_snippet() {
       ' "$file" 2>/dev/null)
 
       # Walk forward from func_start to find closing brace (brace-depth tracking)
-      snippet=$(awk -v s="$func_start" -v max=80 '
+      snippet=$(awk -v s="$func_start" -v max=30 '
         NR < s { next }
         NR == s { depth=0; out=1 }
         out {
@@ -190,11 +195,11 @@ extract_snippet() {
         END { print (start > 0 ? start : anchor) }
       ' "$file" 2>/dev/null)
       start=$((func_start > 0 ? func_start : anchor))
-      snippet=$(sed -n "${start},$((start + 60))p" "$file" 2>/dev/null | head -60 | nl -ba -v"$start")
+      snippet=$(sed -n "${start},$((start + 30))p" "$file" 2>/dev/null | head -30 | nl -ba -v"$start")
       ;;
     *)
-      local s=$((anchor - 20)); [[ $s -lt 1 ]] && s=1
-      snippet=$(sed -n "${s},$((anchor + 20))p" "$file" 2>/dev/null)
+      local s=$((anchor - 15)); [[ $s -lt 1 ]] && s=1
+      snippet=$(sed -n "${s},$((anchor + 15))p" "$file" 2>/dev/null)
       ;;
   esac
 
@@ -230,7 +235,7 @@ for file in "${deduped[@]}"; do
   if [[ $best_line -gt 0 ]]; then
     snippet=$(extract_snippet "$file" "$best_line")
   else
-    snippet=$(head -40 "$file" 2>/dev/null)
+    snippet=$(head -30 "$file" 2>/dev/null)
   fi
 
   [[ -z "$snippet" ]] && continue
@@ -270,43 +275,59 @@ case "$intent" in
     constraints="- identify the exact failure point before suggesting a fix
 - do not refactor code unrelated to the bug
 - avoid breaking changes"
-    output_hint="- root cause analysis
-- minimal targeted fix with explanation
-- updated code block"
+    output_hint="IF BUG:
+→ root cause (1 line)
+→ fixed code"
     ;;
   feature_request)
     constraints="- follow existing patterns in the codebase
 - do not add unnecessary abstractions
 - keep changes minimal and focused"
-    output_hint="- implementation plan (files to create/modify)
-- updated or new code
-- any required config or dependency changes"
+    output_hint="IF FEATURE:
+→ final implementation only"
     ;;
   refactor)
     constraints="- preserve all public signatures and behavior
 - do not introduce new dependencies
 - ensure security and performance are not degraded"
-    output_hint="- before/after diff summary
-- updated code
-- confirmation that behavior is preserved"
+    output_hint="IF REFACTOR:
+→ improved code only"
     ;;
   explain)
     constraints="- reference only the provided files
 - be precise — avoid vague generalizations"
-    output_hint="- clear explanation of the code or concept
-- relevant code references with line numbers
-- any non-obvious design decisions"
+    output_hint="IF EXPLAIN:
+→ precise technical answer (no padding)
+→ relevant code references with line numbers"
     ;;
   *)
     constraints="- analyze ONLY provided files
 - do not assume missing context"
-    output_hint="- direct answer to the question
-- relevant code if applicable"
+    output_hint="→ direct answer
+→ relevant code if applicable"
     ;;
 esac
 
 # 11. Assemble structured prompt
 structured="### SYSTEM CONTEXT
+You are an expert-level software engineer.
+
+Mode: ULTRA_TECHNICAL
+- No simplifications
+- No beginner explanations
+- Use precise technical language only
+- Assume senior-level understanding
+
+Execution Mode: FAST
+- Prioritize speed over verbosity
+- Give shortest correct solution
+- Avoid unnecessary reasoning
+
+Behavior:
+- Be decisive, not exploratory
+- Do not suggest multiple approaches
+- Return final answer immediately
+
 Project Type: ${project_type}
 Intent: ${intent}
 
@@ -328,13 +349,37 @@ fi
 structured="${structured}
 
 ### TASK
-${prompt}
+Solve the request immediately.
+
+Priority:
+1. Correctness
+2. Minimal code
+3. Speed
+
+If code is required:
+→ Return code FIRST
+→ Then optional 1–2 line explanation
+
+Request: ${prompt}
 
 ### CONSTRAINTS (MANDATORY)
 ${constraints}
+- Do not assume missing code
+- Do not invent APIs or methods
+- Use only provided context
+- If unsure → state limitation briefly
 
 ### OUTPUT FORMAT (STRICT)
-${output_hint}"
+- NO explanations unless necessary
+- NO alternative solutions
+- NO filler text
+
+${output_hint}
+
+### THINKING CONTROL
+- Think internally, do not output reasoning
+- Skip analysis steps in response
+- Jump directly to solution"
 
 # 12. Emit replacement prompt
 jq -n --arg p "$structured" '{"prompt": $p}'
