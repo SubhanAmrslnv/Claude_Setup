@@ -11,7 +11,6 @@ Covers intelligent prompt optimization, session profiling, risk-scored security 
 |---|---|---|
 | `jq` | **Yes** | JSON parsing in every hook — without it all hooks silently no-op |
 | `bash` 4.0+ | Yes | All hook scripts |
-| `node` 16+ | Yes | `post-code-intel.sh` code intelligence |
 | `git` | Yes | Branch detection, commit guard |
 | [Claude Code](https://claude.ai/code) | Yes | Hook and command runtime |
 
@@ -41,20 +40,20 @@ Verify: `jq --version`
   core/
     hooks/
       guards/
-        pre-guard.sh                  ← PreToolUse risk-scoring engine (v2.1.1)
+        pre-guard.sh                  ← PreToolUse risk-scoring engine (v2.2.0)
         permission-request.sh         ← PermissionRequest enricher (v1.1.1)
         permission-denied.sh          ← PermissionDenied safe-recovery engine (v1.1.1)
       runtime/
-        post-format.sh                ← registry-driven formatter dispatcher (v2.3.0)
-        post-scan.sh                  ← registry-driven security scanner dispatcher (v2.3.0)
-        post-audit-log.sh             ← audit logger (v1.1.1)
-        post-code-intel.sh            ← code intelligence analyzer (v1.1.1)
-        post-error-analyzer.sh        ← PostToolUseFailure error classifier (v1.0.1)
+        post-format.sh                ← registry-driven formatter dispatcher (v2.4.0)
+        post-scan.sh                  ← registry-driven security scanner dispatcher (v2.5.0)
+        post-audit-log.sh             ← audit logger with rotation + flock (v1.2.0)
+        post-code-intel.sh            ← code intelligence analyzer (v1.2.0)
+        post-error-analyzer.sh        ← PostToolUseFailure error classifier (v1.1.0)
         notification.sh               ← Notification aggregator (v1.0.1)
         task-tracker.sh               ← TaskCreated/TaskCompleted persistence (v1.0.1)
         stop-build.sh                 ← build failure reporter (v1.1.1)
-        session-start.sh              ← SessionStart project profiler (v1.1.1)
-        prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine (v1.1.1)
+        session-start.sh              ← SessionStart project profiler (v1.2.0)
+        prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine (v1.6.0)
     runtime/
       command-runner.sh               ← registry-driven command validator/dispatcher (v1.2.0)
     scanners/
@@ -88,6 +87,10 @@ Verify: `jq --version`
     cortex.config.json                ← framework configuration
   cache/
     project-profile.json              ← generated at session start; consumed by prompt optimizer
+    scans/                            ← hash-based scan cache; entries pruned after 7 days
+  test/
+    run.sh                            ← smoke test runner
+    fixtures/                         ← JSON payloads for pre-guard, post-error-analyzer, post-scan
   base/                               ← remote Cortex content (updated by /update-cortex)
   local/                              ← project-local overrides (never overwritten)
 .claude/
@@ -135,16 +138,16 @@ All hooks run from the path resolved by CORTEX_ROOT. Hook paths in `settings.jso
 
 | Event | Hook | What it does |
 |---|---|---|
-| `PreToolUse (Bash)` | `guards/pre-guard.sh` (v2.1.1) | Risk-scoring engine — scores command across 6 categories, warns or blocks |
+| `PreToolUse (Bash)` | `guards/pre-guard.sh` (v2.2.0) | Risk-scoring engine — scores command across 6 categories, warns or blocks; thresholds configurable |
 | `PermissionRequest` | `guards/permission-request.sh` (v1.1.1) | Enriches approval prompts with intent, risks, and safer alternatives |
 | `PermissionDenied` | `guards/permission-denied.sh` (v1.1.1) | Generates a safe alternative command and decides whether retry is possible |
-| `SessionStart` | `runtime/session-start.sh` (v1.1.1) | Detects project type, extracts metadata, writes `.cortex/cache/project-profile.json` |
-| `UserPromptSubmit` | `runtime/prompt-optimizer.sh` (v1.1.1) | Detects intent, finds relevant files, extracts code snippets, outputs structured prompt |
-| `PostToolUse (Write\|Edit)` | `runtime/post-format.sh` (v2.3.0) | Registry-driven: dispatches to formatters by file extension |
-| `PostToolUse (Write\|Edit)` | `runtime/post-scan.sh` (v2.3.0) | Registry-driven: dispatches to security scanners by file extension |
-| `PostToolUse (Write\|Edit)` | `runtime/post-code-intel.sh` (v1.1.1) | Analyzes modified files for complexity, duplication, naming, and structure issues |
-| `PostToolUse (Write\|Edit\|Bash)` | `runtime/post-audit-log.sh` (v1.1.1) | Appends every tool use to `~/.claude/audit.log` |
-| `PostToolUseFailure` | `runtime/post-error-analyzer.sh` (v1.0.1) | Parses stderr, classifies error type, extracts file/line, emits structured fix suggestion |
+| `SessionStart` | `runtime/session-start.sh` (v1.2.0) | Detects project type (6 languages), extracts metadata, writes profile; prunes stale scan cache |
+| `UserPromptSubmit` | `runtime/prompt-optimizer.sh` (v1.6.0) | Detects intent, finds relevant files, extracts snippets, outputs structured prompt; supports `--y` flag |
+| `PostToolUse (Write\|Edit)` | `runtime/post-format.sh` (v2.4.0) | Registry-driven: dispatches to formatters by file extension |
+| `PostToolUse (Write\|Edit)` | `runtime/post-scan.sh` (v2.5.0) | Registry-driven: dispatches to security scanners; concurrency-limited, output-isolated, hash-cached |
+| `PostToolUse (Write\|Edit)` | `runtime/post-code-intel.sh` (v1.2.0) | Analyzes modified files for complexity, duplication, naming, and structure issues |
+| `PostToolUse (Write\|Edit\|Bash)` | `runtime/post-audit-log.sh` (v1.2.0) | Appends every tool use to `~/.claude/audit.log`; rotates at 5MB; flock concurrency-safe |
+| `PostToolUseFailure` | `runtime/post-error-analyzer.sh` (v1.1.0) | Single-pass classifier: sets type + root cause + suggestion in one scan of stderr |
 | `Notification` | `runtime/notification.sh` (v1.0.1) | Aggregates hook signals; emits only medium/high severity actionable notifications |
 | `TaskCreated` / `TaskCompleted` | `runtime/task-tracker.sh` (v1.0.1) | Persists task lifecycle events to `.cortex/cache/tasks.json` |
 | `Stop` | `runtime/stop-build.sh` (v1.1.1) | Builds project; prints errors on failure — does NOT auto-fix |
@@ -153,7 +156,7 @@ All hooks run from the path resolved by CORTEX_ROOT. Hook paths in `settings.jso
 
 ## Hook Details
 
-### Risk-Scored Security Guard (`pre-guard.sh` v2.1.1)
+### Risk-Scored Security Guard (`pre-guard.sh` v2.2.0)
 
 Replaces flat pattern-blocking with a numeric risk engine. Accumulates a score across 6 categories:
 
@@ -166,7 +169,9 @@ Replaces flat pattern-blocking with a numeric risk engine. Accumulates a score a
 | Sensitive files | `.env .pem .key .pfx` | +25 |
 | Protected branch | `main / master / develop` (git commands only) | +20 |
 
-**Thresholds:** `risk < 30` → allow silently · `30–69` → allow with JSON warning · `≥ 70` → block with reason + suggestion.
+**Thresholds:** `risk < warn` → allow silently · `warn–(block-1)` → allow with JSON warning · `≥ block` → block with reason + suggestion.
+
+Defaults: `warn=30 / block=70`. Override per-project via `cortex.config.json → riskThresholds`.
 
 ---
 
@@ -198,27 +203,37 @@ Safe transformations include: `rm -rf` → `rm -ri`, `git reset --hard` → `git
 
 ---
 
-### Session Profiler (`session-start.sh`)
+### Session Profiler (`session-start.sh` v1.2.0)
 
-Runs automatically when a session begins. Detects project type (dotnet > node > python priority), extracts:
-- **Dependencies** — `PackageReference` from `.csproj`, keys from `package.json`, lines from `requirements.txt`
-- **Entry points** — `Program.cs`, `index.ts`, `main.py`, etc.
-- **Structure** — notable directories (`src`, `api`, `services`, `tests`, `config`, etc.)
+Runs automatically when a session begins. Detects project type via a single `find` pass across all indicator files. Priority (highest wins): `dotnet > rust > java > node > go > python`.
 
-Writes `.cortex/cache/project-profile.json`. Idempotent — skips rewrite if project files are unchanged (fingerprinted via mtime checksum). Output consumed by the prompt optimizer.
+Extracts per project type:
+
+| Type | Dependencies | Entry Points |
+|---|---|---|
+| dotnet | `PackageReference` from `.csproj` | `Program.cs`, `Startup.cs`, `*Host*.cs` |
+| rust | `[dependencies]` from `Cargo.toml` | `src/main.rs`, `src/lib.rs` |
+| java | `<artifactId>` from `pom.xml` / Gradle deps | `*Application.java`, `Main.java` |
+| node | `dependencies` + `devDependencies` from `package.json` | `index.ts`, `app.ts`, `server.ts`, `main.ts` |
+| go | `require` block from `go.mod` | all `main.go` files |
+| python | `requirements.txt` or `[tool.poetry.dependencies]` | `main.py`, `app.py`, `manage.py`, `wsgi.py` |
+
+Writes `.cortex/cache/project-profile.json`. Idempotent — skips rewrite if indicator file mtimes are unchanged. Also prunes scan cache entries older than 7 days. Output consumed by the prompt optimizer.
 
 ---
 
-### Prompt Optimizer (`prompt-optimizer.sh`)
+### Prompt Optimizer (`prompt-optimizer.sh` v1.6.0)
 
 Intercepts every user prompt via the `UserPromptSubmit` hook (reads from stdin). Pipeline:
 
-1. **Normalize** — trim whitespace; expand prompts under 20 chars with `"Clarify and resolve: ..."`
-2. **Detect intent** — `bug_fix` / `feature_request` / `refactor` / `question`
-3. **Find relevant files** — keyword matching on CamelCase identifiers, stack-trace path extraction, naming heuristics (`auth`, `service`, `controller`, `handler`, etc.)
-4. **Extract snippets** — ±20 lines around the best keyword match per file (max 5 files)
-5. **Load project profile** — reads `.cortex/cache/project-profile.json` for project type
-6. **Output structured prompt** — replaces the raw prompt with context + code snippets + intent + constraints
+1. **Normalize** — trim whitespace; skip prompts >8000 chars (pasted logs/diffs)
+2. **`--y` flag** — if prompt ends with `--y`, strip it and inject `GLOBAL ANSWER POLICY` (default all binary decisions to YES; security/destructive safeguards excluded)
+3. **Prompt cache** — skip re-processing identical prompts (cksum-keyed)
+4. **Detect intent** — single awk pass: `bug_fix` / `feature_request` / `refactor` / `explain` / `question`
+5. **Find relevant files** — file list cached per session (invalidated on cwd mtime change); git-changed files prioritized; keyword grep + stack-trace paths + naming heuristics
+6. **Extract snippets** — function-aware: walks back to nearest function/class boundary, tracks brace depth to find closing, extracts up to 30 lines
+7. **Load project profile** — reads `.cortex/cache/project-profile.json` for project type
+8. **Output structured prompt** — replaces the raw prompt with intent, constraints, code context, and output format hints
 
 ---
 
@@ -228,17 +243,17 @@ Runs after every `Write` or `Edit` on `.cs .js .ts .jsx .tsx` files ≤ 1MB. Fou
 
 | Check | Mechanism | Threshold |
 |---|---|---|
-| Method length | Brace-depth tracking from declaration | > 50 lines |
-| Nesting depth | Live `{}` counter at conditional keywords | depth > 3 |
-| Duplication | MD5 of 8-line sliding window (normalized) | Same hash ≥ 8 lines apart |
+| Method length | Brace-depth tracking from declaration — combined single pass | > 50 lines |
+| Nesting depth | Live `{}` counter at conditional keywords — combined single pass | depth > 3 |
+| Duplication | cksum of 6-line sliding window (whitespace-normalized) | Same hash ≥ 6 lines apart |
 | Naming | Declaration regex vs. set of non-descriptive names | Capped at 3 per file |
-| Structure | Line count + UI×DB keyword cross-detection | > 500 lines or mixed concerns |
+| Structure | Line count + UI×DB keyword cross-detection via direct grep | > 500 lines or mixed concerns |
 
 Outputs structured JSON to stdout. Never modifies files.
 
 ---
 
-### Registry-Driven Dispatch (`post-format.sh` v2.3.0 + `post-scan.sh` v2.3.0)
+### Registry-Driven Dispatch (`post-format.sh` v2.4.0 + `post-scan.sh` v2.5.0)
 
 Both hooks contain zero language-specific logic. All extension→scanner mappings live in `.cortex/registry/scanners.json`. The registry covers 25 language directories:
 

@@ -7,7 +7,6 @@
 | [Claude Code](https://claude.ai/code) | Yes | Runs hooks and commands |
 | `bash` 4.0+ | Yes | All hook scripts |
 | `jq` | Yes | JSON parsing in every hook |
-| `node` 16+ | Yes | `post-code-intel.sh` code intelligence hook |
 | `git` | Yes | Branch detection, commit command |
 
 Install `jq` on Windows:
@@ -34,13 +33,13 @@ Copy two folders into your Windows user directory. That's it.
 **1. Copy `.cortex` to your user directory:**
 
 ```
-C:\Users\subhan.amiraslanov\.cortex\
+C:\Users\<your-username>\.cortex\
 ```
 
 **2. Copy `.claude` to your user directory:**
 
 ```
-C:\Users\subhan.amiraslanov\.claude\
+C:\Users\<your-username>\.claude\
 ```
 
 Both folders sit directly under `C:\Users\<your-username>\` — not inside any project, not inside any subfolder.
@@ -86,6 +85,14 @@ This deploys hooks, validates the registry, and confirms the setup is wired corr
 
 All hooks, commands, and scanners should report as active.
 
+**6. (Optional) Run smoke tests:**
+
+```bash
+bash .cortex/test/run.sh
+```
+
+Runs 13 fixture-based tests covering pre-guard, post-error-analyzer, and post-scan. All should pass.
+
 ---
 
 ## How it works
@@ -100,8 +107,9 @@ The `.claude/` folder wires Cortex into Claude Code by providing `settings.json`
 
 ## Summary
 
-1. Copy `.cortex` and `.claude` into `C:\Users\<username>\`
+1. Copy `.cortex` and `.claude` into `C:\Users\<your-username>\`
 2. Copy both `.claude` and `.cortex` into the root of each project you want Cortex active in
 3. Run `/init-cortex` once per project
+4. Optionally run `bash .cortex/test/run.sh` to verify the installation
 
 The global `.cortex/` install acts as a fallback for machines or projects without a local copy. The per-project `.claude/` and `.cortex/` folders take precedence and give you version-pinned, project-isolated control over the full framework.
