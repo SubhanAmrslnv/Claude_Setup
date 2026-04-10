@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.1.1
+# @version: 1.2.0
 # SessionStart initializer — detects project type, extracts metadata,
 # writes .cortex/cache/project-profile.json. Idempotent via fingerprint.
 # Target: <200ms on typical repos.
@@ -22,24 +22,50 @@ PROFILE="$CACHE_DIR/project-profile.json"
 mkdir -p "$CACHE_DIR"
 
 # ---------------------------------------------------------------------------
-# 1. Detect project type (maxdepth 2 for speed; priority: dotnet > node > python)
+# 1. Single find pass — all project indicator files in one shot
 # ---------------------------------------------------------------------------
-csproj=$(find "$cwd" -maxdepth 2 -name "*.csproj" 2>/dev/null | head -1)
-pkgjson=$(find "$cwd" -maxdepth 2 -name "package.json" \
-  ! -path "*/node_modules/*" 2>/dev/null | head -1)
-reqstxt=$(find "$cwd" -maxdepth 2 -name "requirements.txt" 2>/dev/null | head -1)
-pyproject=$(find "$cwd" -maxdepth 2 -name "pyproject.toml" 2>/dev/null | head -1)
+csproj=""; pkgjson=""; reqstxt=""; pyproject=""
+gomod=""; cargotoml=""; pomxml=""; buildgradle=""
 
+while IFS= read -r f; do
+  case "${f##*/}" in
+    *.csproj)                         [[ -z "$csproj" ]]       && csproj="$f" ;;
+    package.json)                     [[ -z "$pkgjson" ]]      && pkgjson="$f" ;;
+    requirements.txt)                 [[ -z "$reqstxt" ]]      && reqstxt="$f" ;;
+    pyproject.toml)                   [[ -z "$pyproject" ]]    && pyproject="$f" ;;
+    go.mod)                           [[ -z "$gomod" ]]        && gomod="$f" ;;
+    Cargo.toml)                       [[ -z "$cargotoml" ]]    && cargotoml="$f" ;;
+    pom.xml)                          [[ -z "$pomxml" ]]       && pomxml="$f" ;;
+    build.gradle|build.gradle.kts)    [[ -z "$buildgradle" ]]  && buildgradle="$f" ;;
+  esac
+done < <(find "$cwd" -maxdepth 2 \( \
+    -name "*.csproj"          -o \
+    -name "package.json"      -o \
+    -name "requirements.txt"  -o \
+    -name "pyproject.toml"    -o \
+    -name "go.mod"            -o \
+    -name "Cargo.toml"        -o \
+    -name "pom.xml"           -o \
+    -name "build.gradle"      -o \
+    -name "build.gradle.kts"  \
+  \) ! -path "*/node_modules/*" 2>/dev/null)
+
+# ---------------------------------------------------------------------------
+# 2. Project type detection (last match = highest priority: dotnet > rust > java > node > go > python)
+# ---------------------------------------------------------------------------
 project_type="unknown"
-[[ -n "$reqstxt" || -n "$pyproject" ]] && project_type="python"
-[[ -n "$pkgjson" ]]                     && project_type="node"
-[[ -n "$csproj" ]]                      && project_type="dotnet"
+[[ -n "$reqstxt" || -n "$pyproject" ]]  && project_type="python"
+[[ -n "$gomod" ]]                        && project_type="go"
+[[ -n "$pkgjson" ]]                      && project_type="node"
+[[ -n "$pomxml" || -n "$buildgradle" ]]  && project_type="java"
+[[ -n "$cargotoml" ]]                    && project_type="rust"
+[[ -n "$csproj" ]]                       && project_type="dotnet"
 
 # ---------------------------------------------------------------------------
-# 2. Fingerprint — mtime of indicator files; skip rewrite if unchanged
+# 3. Fingerprint — mtime of all indicator files; skip rewrite if unchanged
 # ---------------------------------------------------------------------------
 fingerprint_sources=""
-for f in "$csproj" "$pkgjson" "$reqstxt" "$pyproject"; do
+for f in "$csproj" "$pkgjson" "$reqstxt" "$pyproject" "$gomod" "$cargotoml" "$pomxml" "$buildgradle"; do
   [[ -f "$f" ]] && fingerprint_sources+=$(stat -c "%Y" "$f" 2>/dev/null || \
     stat -f "%m" "$f" 2>/dev/null)"$f"
 done
@@ -51,7 +77,7 @@ if [[ -f "$PROFILE" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Extract metadata per project type
+# 4. Extract metadata per project type
 # ---------------------------------------------------------------------------
 dependencies_json="[]"
 entry_points_json="[]"
@@ -59,14 +85,12 @@ entry_points_json="[]"
 case "$project_type" in
 
   dotnet)
-    # Dependencies: <PackageReference Include="Pkg" from all .csproj files
     mapfile -t deps < <(find "$cwd" -maxdepth 3 -name "*.csproj" 2>/dev/null \
       | xargs grep -h 'PackageReference' 2>/dev/null \
       | grep -oP 'Include="\K[^"]+' \
       | sort -u | head -30)
     dependencies_json=$(printf '%s\n' "${deps[@]}" | jq -R . | jq -s .)
 
-    # Entry points: Program.cs, Startup.cs, any *Host*.cs
     mapfile -t eps < <(find "$cwd" -maxdepth 4 \
       \( -name "Program.cs" -o -name "Startup.cs" -o -name "*Host*.cs" \) \
       2>/dev/null | sed "s|$cwd/||" | head -10)
@@ -74,7 +98,6 @@ case "$project_type" in
     ;;
 
   node)
-    # Dependencies: merge dependencies + devDependencies keys
     if [[ -f "$pkgjson" ]]; then
       dependencies_json=$(jq -r '
         [(.dependencies // {}), (.devDependencies // {})]
@@ -84,7 +107,6 @@ case "$project_type" in
       ' "$pkgjson" 2>/dev/null || echo "[]")
     fi
 
-    # Entry point from package.json "main", then common filenames
     main_field=$(jq -r '.main // empty' "$pkgjson" 2>/dev/null)
     mapfile -t eps < <(
       { [[ -n "$main_field" ]] && echo "$main_field"; }
@@ -95,13 +117,11 @@ case "$project_type" in
         ! -path "*/node_modules/*" 2>/dev/null \
       | sed "s|$cwd/||"
     )
-    # Deduplicate, cap
     mapfile -t eps < <(printf '%s\n' "${eps[@]}" | sort -u | head -10)
     entry_points_json=$(printf '%s\n' "${eps[@]}" | jq -R . | jq -s .)
     ;;
 
   python)
-    # Dependencies from requirements.txt
     if [[ -f "$reqstxt" ]]; then
       mapfile -t deps < <(grep -v '^\s*#' "$reqstxt" 2>/dev/null \
         | grep -v '^\s*$' \
@@ -110,7 +130,6 @@ case "$project_type" in
         | sort -u | head -30)
       dependencies_json=$(printf '%s\n' "${deps[@]}" | jq -R . | jq -s .)
     elif [[ -f "$pyproject" ]]; then
-      # pyproject.toml: extract [tool.poetry.dependencies] or [project] dependencies
       mapfile -t deps < <(grep -A50 '^\[tool.poetry.dependencies\]\|^\[project\]' \
         "$pyproject" 2>/dev/null \
         | grep -oP '^[a-zA-Z][a-zA-Z0-9_-]+(?=\s*[=<>!])' \
@@ -118,7 +137,6 @@ case "$project_type" in
       dependencies_json=$(printf '%s\n' "${deps[@]}" | jq -R . | jq -s .)
     fi
 
-    # Entry points: main.py, app.py, manage.py, wsgi.py, asgi.py, __main__.py
     mapfile -t eps < <(find "$cwd" -maxdepth 3 \
       \( -name "main.py" -o -name "app.py" -o -name "manage.py" \
          -o -name "wsgi.py" -o -name "asgi.py" -o -name "__main__.py" \) \
@@ -126,10 +144,53 @@ case "$project_type" in
     entry_points_json=$(printf '%s\n' "${eps[@]}" | jq -R . | jq -s .)
     ;;
 
+  go)
+    if [[ -f "$gomod" ]]; then
+      mapfile -t deps < <(grep -E '^\s+\S+/\S+\s+v' "$gomod" 2>/dev/null \
+        | awk '{print $1}' | sort -u | head -30)
+      dependencies_json=$(printf '%s\n' "${deps[@]}" | jq -R . | jq -s .)
+    fi
+
+    mapfile -t eps < <(find "$cwd" -maxdepth 4 -name "main.go" 2>/dev/null \
+      | sed "s|$cwd/||" | head -10)
+    entry_points_json=$(printf '%s\n' "${eps[@]}" | jq -R . | jq -s .)
+    ;;
+
+  rust)
+    if [[ -f "$cargotoml" ]]; then
+      mapfile -t deps < <(sed -n '/^\[dependencies\]/,/^\[/p' "$cargotoml" 2>/dev/null \
+        | grep -oE '^[a-zA-Z][a-zA-Z0-9_-]+\s*=' | sed 's/\s*=//' | sort -u | head -30)
+      dependencies_json=$(printf '%s\n' "${deps[@]}" | jq -R . | jq -s .)
+    fi
+
+    mapfile -t eps < <(find "$cwd" -maxdepth 3 \( -name "main.rs" -o -name "lib.rs" \) \
+      2>/dev/null | sed "s|$cwd/||" | head -10)
+    entry_points_json=$(printf '%s\n' "${eps[@]}" | jq -R . | jq -s .)
+    ;;
+
+  java)
+    if [[ -f "$pomxml" ]]; then
+      mapfile -t deps < <(grep -A3 '<dependency>' "$pomxml" 2>/dev/null \
+        | grep '<artifactId>' | grep -oP '<artifactId>\K[^<]+' | sort -u | head -30)
+      dependencies_json=$(printf '%s\n' "${deps[@]}" | jq -R . | jq -s .)
+    elif [[ -f "$buildgradle" ]]; then
+      mapfile -t deps < <(grep -oE \
+        "(implementation|api|compile|testImplementation)[[:space:]]*['\"]([^'\"]+)['\"]" \
+        "$buildgradle" 2>/dev/null \
+        | grep -oE "['\"][^'\"]+['\"]" | tr -d "'\"\(" | grep ':' | sort -u | head -30)
+      dependencies_json=$(printf '%s\n' "${deps[@]}" | jq -R . | jq -s .)
+    fi
+
+    mapfile -t eps < <(find "$cwd" -maxdepth 5 \
+      \( -name "*Application.java" -o -name "Main.java" \) \
+      2>/dev/null | sed "s|$cwd/||" | head -10)
+    entry_points_json=$(printf '%s\n' "${eps[@]}" | jq -R . | jq -s .)
+    ;;
+
 esac
 
 # ---------------------------------------------------------------------------
-# 4. Solution structure — notable top-level and second-level directories
+# 5. Solution structure — notable directories
 # ---------------------------------------------------------------------------
 KNOWN_DIRS='src|api|app|lib|services|modules|controllers|handlers|middleware'
 KNOWN_DIRS+='|tests|test|spec|__tests__|e2e|integration'
@@ -149,7 +210,7 @@ mapfile -t structure < <(
 structure_json=$(printf '%s\n' "${structure[@]}" | jq -R . | jq -s .)
 
 # ---------------------------------------------------------------------------
-# 5. Write profile (atomic: write tmp then move)
+# 6. Write profile (atomic: write tmp then move)
 # ---------------------------------------------------------------------------
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
 tmp_file="$CACHE_DIR/.profile.tmp.$$"
@@ -169,5 +230,10 @@ jq -n \
     detectedAt:    $detectedAt,
     fingerprint:   $fingerprint
   }' > "$tmp_file" && mv "$tmp_file" "$PROFILE"
+
+# ---------------------------------------------------------------------------
+# 7. Prune stale scan caches older than 7 days
+# ---------------------------------------------------------------------------
+find "$CORTEX_ROOT/cache/scans" -maxdepth 1 -type f -mtime +7 -delete 2>/dev/null
 
 exit 0

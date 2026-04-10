@@ -1,6 +1,6 @@
 {
   "pre-guard.sh": {
-    "version": "2.1.1",
+    "version": "2.2.0",
     "source": "core/hooks/guards/pre-guard.sh"
   },
   "permission-request.sh": {
@@ -16,7 +16,7 @@
     "source": "core/hooks/runtime/post-format.sh"
   },
   "post-scan.sh": {
-    "version": "2.4.0",
+    "version": "2.5.0",
     "source": "core/hooks/runtime/post-scan.sh"
   },
   "post-audit-log.sh": {
@@ -24,19 +24,19 @@
     "source": "core/hooks/runtime/post-audit-log.sh"
   },
   "prompt-optimizer.sh": {
-    "version": "1.4.0",
+    "version": "1.6.0",
     "source": "core/hooks/runtime/prompt-optimizer.sh"
   },
   "session-start.sh": {
-    "version": "1.1.1",
+    "version": "1.2.0",
     "source": "core/hooks/runtime/session-start.sh"
   },
   "post-code-intel.sh": {
-    "version": "1.1.1",
+    "version": "1.2.0",
     "source": "core/hooks/runtime/post-code-intel.sh"
   },
   "post-error-analyzer.sh": {
-    "version": "1.0.1",
+    "version": "1.1.0",
     "source": "core/hooks/runtime/post-error-analyzer.sh"
   },
   "notification.sh": {

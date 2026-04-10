@@ -1,6 +1,10 @@
 {
-  "version": "3.0.0",
+  "version": "3.1.0",
   "runtime_hooks_dir": "~/.claude/hooks",
   "runtime_env_file": "~/.claude/cortex.env",
-  "settings_file": "~/.claude/settings.json"
+  "settings_file": "~/.claude/settings.json",
+  "riskThresholds": {
+    "warn": 30,
+    "block": 70
+  }
 }

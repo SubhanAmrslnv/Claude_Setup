@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.1.1
+# @version: 1.2.0
 # PostToolUse code intelligence — analyzes modified files for complexity,
 # duplication, naming, and structure issues. Read-only; never modifies files.
 
@@ -29,47 +29,56 @@ esac
 size=$(wc -c < "$file" 2>/dev/null || echo 0)
 [[ $size -gt 1048576 ]] && exit 0
 
-issues_json="[]"
+# Accumulate issues in a temp file; jq -s slurps once at the end (O(1) array assembly)
+issue_tmp=$(mktemp)
+trap 'rm -f "$issue_tmp"' EXIT
 
 add_issue() {
-  local type="$1" message="$2" line="$3"
-  issues_json=$(echo "$issues_json" | jq \
-    --arg t "$type" --arg m "$message" --argjson l "$line" \
-    '. += [{"type":$t,"message":$m,"line":$l}]')
+  jq -n --arg t "$1" --arg m "$2" --argjson l "$3" \
+    '{"type":$t,"message":$m,"line":$l}' >> "$issue_tmp" 2>/dev/null
 }
 
-# ─── Complexity: method length (>50 lines) ───────────────────────────────────
+# ─── Combined pass: method length + nesting depth ────────────────────────────
+# Braces counted once per line; method_depth tracks the current method boundary,
+# global_depth tracks cumulative nesting for control-flow checks.
 
 method_name=""
 method_start=0
-depth=0
+method_depth=0
 has_opened=0
+global_depth=0
+last_reported_bucket=-1
 lineno=0
 
 while IFS= read -r line; do
   (( lineno++ ))
 
-  # Detect method/function start when not already tracking one
+  # Count braces once — reused by both method-length and nesting-depth checks
+  opens=$(grep -o '{' <<< "$line" | wc -l)
+  closes=$(grep -o '}' <<< "$line" | wc -l)
+
+  # --- Method length ---
   if [[ $method_start -eq 0 ]]; then
-    if echo "$line" | grep -qE \
+    if grep -qE \
       '^\s*(public|private|protected|internal|static|async|override|virtual)\b.*\w+\s*\([^)]*\)\s*(\{|$)' \
-      || echo "$line" | grep -qE \
-      '^\s*(export\s+)?(async\s+)?function\s+\w+|^\s*(const|let|var)\s+\w+\s*=\s*(async\s+)?($$[^)]*$$|\w+)\s*=>|^\s*\w+\s*\([^)]*\)\s*\{'; then
-      method_name=$(echo "$line" | grep -oE '(function\s+\w+|\b(public|private|protected)\s+[\w<>\[\]]+\s+\w+\s*\(|\bconst\s+\w+|\blet\s+\w+)' | head -1 | grep -oE '\w+$')
+      <<< "$line" \
+      || grep -qE \
+      '^\s*(export\s+)?(async\s+)?function\s+\w+|^\s*(const|let|var)\s+\w+\s*=\s*(async\s+)?(\([^)]*\)|\w+)\s*=>|^\s*\w+\s*\([^)]*\)\s*\{' \
+      <<< "$line"; then
+      method_name=$(grep -oE \
+        '(function\s+\w+|\b(public|private|protected)\s+[\w<>\[\]]+\s+\w+\s*\(|\bconst\s+\w+|\blet\s+\w+)' \
+        <<< "$line" | head -1 | grep -oE '\w+$')
       [[ -z "$method_name" ]] && method_name="anonymous"
       method_start=$lineno
-      depth=0
+      method_depth=0
       has_opened=0
     fi
   fi
 
   if [[ $method_start -gt 0 ]]; then
-    opens=$(echo "$line" | grep -o '{' | wc -l)
-    closes=$(echo "$line" | grep -o '}' | wc -l)
-    (( depth += opens - closes ))
+    (( method_depth += opens - closes ))
     [[ $opens -gt 0 ]] && has_opened=1
-
-    if [[ $has_opened -eq 1 && $depth -le 0 ]]; then
+    if [[ $has_opened -eq 1 && $method_depth -le 0 ]]; then
       len=$(( lineno - method_start + 1 ))
       if [[ $len -gt 50 ]]; then
         add_issue "complexity" \
@@ -79,28 +88,18 @@ while IFS= read -r line; do
       method_start=0
     fi
   fi
-done < "$file"
 
-# ─── Complexity: nesting depth (>3) ─────────────────────────────────────────
+  # --- Nesting depth ---
+  (( global_depth += opens - closes ))
+  [[ $global_depth -lt 0 ]] && global_depth=0
 
-depth=0
-lineno=0
-last_reported_bucket=-1
-
-while IFS= read -r line; do
-  (( lineno++ ))
-  opens=$(echo "$line" | grep -o '{' | wc -l)
-  closes=$(echo "$line" | grep -o '}' | wc -l)
-  (( depth += opens - closes ))
-  [[ $depth -lt 0 ]] && depth=0
-
-  if echo "$line" | grep -qE '^\s*(if|else if|for|foreach|while|switch|catch)\s*[\(\{]'; then
-    if [[ $depth -gt 3 ]]; then
+  if grep -qE '^\s*(if|else if|for|foreach|while|switch|catch)\s*[\(\{]' <<< "$line"; then
+    if [[ $global_depth -gt 3 ]]; then
       bucket=$(( lineno / 10 ))
       if [[ $bucket -ne $last_reported_bucket ]]; then
         last_reported_bucket=$bucket
         add_issue "complexity" \
-          "Nesting depth ${depth} exceeds 3 — consider early returns or extracting nested logic" \
+          "Nesting depth ${global_depth} exceeds 3 — consider early returns or extracting nested logic" \
           "$lineno"
       fi
     fi
@@ -110,7 +109,6 @@ done < "$file"
 # ─── Duplication: repeated 6-line blocks (cksum-based) ──────────────────────
 
 WINDOW=6
-tmpdir=$(mktemp -d)
 total_lines=$(wc -l < "$file")
 dup_count=0
 
@@ -142,24 +140,20 @@ if [[ $total_lines -gt $(( WINDOW * 2 )) ]]; then
   unset seen_hashes
 fi
 
-rm -rf "$tmpdir"
-
 # ─── Naming: non-descriptive variable names ──────────────────────────────────
 
-BAD_NAMES='(^|[^a-zA-Z])(tmp|temp|data|obj|foo|bar|baz|val|res|ret|info|stuff|thing|item|elem|el)([^a-zA-Z]|$)'
 DECL_PATTERN='(const|let|var|int|string|bool|double|float|var)\s+[a-z_]'
-
 naming_count=0
 lineno=0
 
 while IFS= read -r line; do
   (( lineno++ ))
   [[ $naming_count -ge 3 ]] && break
-  echo "$line" | grep -qE '^\s*for\s*\(' && continue
-  if echo "$line" | grep -qiE "$DECL_PATTERN"; then
-    name=$(echo "$line" | grep -oiE '(const|let|var|int|string|bool|double|float)\s+([a-z_]\w*)' \
+  grep -qE '^\s*for\s*\(' <<< "$line" && continue
+  if grep -qiE "$DECL_PATTERN" <<< "$line"; then
+    name=$(grep -oiE '(const|let|var|int|string|bool|double|float)\s+([a-z_]\w*)' <<< "$line" \
       | awk '{print $NF}' | head -1)
-    if echo "$name" | grep -qiE '^(tmp|temp|data|obj|foo|bar|baz|val|res|ret|info|stuff|thing|item|elem|el)$'; then
+    if grep -qiE '^(tmp|temp|data|obj|foo|bar|baz|val|res|ret|info|stuff|thing|item|elem|el)$' <<< "$name"; then
       add_issue "naming" \
         "Variable '${name}' is not descriptive — use a name that reflects its purpose" \
         "$lineno"
@@ -177,11 +171,12 @@ if [[ $line_count -gt 500 ]]; then
     "1"
 fi
 
-source_content=$(cat "$file")
-has_ui=0
-has_db=0
-echo "$source_content" | grep -qiE '(render|component|innerHTML|querySelector|getElementById|template|v-if|ng-if)' && has_ui=1
-echo "$source_content" | grep -qiE '(query|execute|sql|dbContext|repository|connection|transaction|INSERT|SELECT|UPDATE|DELETE)' && has_db=1
+# Direct grep on file — no cat into memory, stops at first match each
+has_ui=0; has_db=0
+grep -qiE '(render|component|innerHTML|querySelector|getElementById|template|v-if|ng-if)' "$file" \
+  2>/dev/null && has_ui=1
+grep -qiE '(query|execute|sql|dbContext|repository|connection|transaction|INSERT|SELECT|UPDATE|DELETE)' "$file" \
+  2>/dev/null && has_db=1
 
 if [[ $has_ui -eq 1 && $has_db -eq 1 ]]; then
   add_issue "structure" \
@@ -191,7 +186,9 @@ fi
 
 # ─── Output ──────────────────────────────────────────────────────────────────
 
-issue_count=$(echo "$issues_json" | jq 'length')
+issues_json=$(jq -s '.' "$issue_tmp" 2>/dev/null || echo "[]")
+issue_count=$(echo "$issues_json" | jq 'length' 2>/dev/null || echo 0)
+
 if [[ $issue_count -gt 0 ]]; then
   rel="${file#$(pwd)/}"
   jq -n \

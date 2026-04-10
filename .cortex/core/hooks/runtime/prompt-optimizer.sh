@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.4.0
+# @version: 1.6.0
 # UserPromptSubmit optimizer — weighted intent, inverted file search,
 # scored relevance, function-aware snippets, structured output.
 # Exits 0 silently on any failure to avoid blocking input.
@@ -25,6 +25,17 @@ cwd=$(echo "$input" | jq -r '.cwd // empty' 2>/dev/null)
 prompt=$(echo "$raw_prompt" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 [[ ${#prompt} -lt 3 ]] && exit 0
 
+# Prompt length guard — very long prompts (pasted diffs, logs) produce poor context
+[[ ${#prompt} -gt 8000 ]] && exit 0
+
+# 1b. --y flag detection — must be a suffix, not inline
+FORCE_YES_MODE=false
+if [[ "$prompt" =~ (^|[[:space:]])--y[[:space:]]*$ ]]; then
+  FORCE_YES_MODE=true
+  prompt=$(echo "$prompt" | sed 's/[[:space:]]*--y[[:space:]]*$//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  [[ ${#prompt} -lt 3 ]] && exit 0
+fi
+
 # 2. Prompt cache — skip re-processing identical prompts
 cache_dir="$CORTEX_ROOT/cache"
 cache_file="$cache_dir/prompt-cache.txt"
@@ -36,11 +47,16 @@ echo "$prompt_hash" >> "$cache_file" 2>/dev/null
 # Keep cache bounded
 tail -200 "$cache_file" > "${cache_file}.tmp" 2>/dev/null && mv "${cache_file}.tmp" "$cache_file" 2>/dev/null
 
-# 3. Weighted intent detection
-score_bug=$(echo "$prompt"     | grep -ioE '\b(error|exception|fail|bug|crash|null|undefined|broken|wrong|issue|traceback|stacktrace)\b' | wc -l)
-score_refactor=$(echo "$prompt" | grep -ioE '\b(refactor|improve|optimize|clean|restructure|rename|simplify|rewrite|extract)\b' | wc -l)
-score_feature=$(echo "$prompt"  | grep -ioE '\b(add|create|implement|build|generate|introduce)\b' | wc -l)
-score_explain=$(echo "$prompt"  | grep -ioE '\b(explain|describe|what is|how does|why does|review|understand|show me)\b' | wc -l)
+# 3. Weighted intent detection — single awk pass (4x fewer subprocesses)
+read -r score_bug score_refactor score_feature score_explain < <(
+  echo "$prompt" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z' '\n' | awk '
+    /^(error|exception|fail|bug|crash|null|undefined|broken|wrong|issue|traceback|stacktrace)$/ { bug++ }
+    /^(refactor|improve|optimize|clean|restructure|rename|simplify|rewrite|extract)$/           { ref++ }
+    /^(add|create|implement|build|generate|introduce)$/                                          { feat++ }
+    /^(explain|describe|understand|review)$/                                                     { expl++ }
+    END { print bug+0, ref+0, feat+0, expl+0 }
+  '
+)
 
 intent="question"
 max_score=$((score_bug > score_refactor ? score_bug : score_refactor))
@@ -59,11 +75,6 @@ if [[ $max_score -gt 0 ]]; then
   fi
 fi
 
-# 3b. Intent override — keyword force (super speed hack: fixes mis-classification)
-if echo "$prompt" | grep -qiE 'fix|error|bug|exception'; then
-  intent="bug_fix"
-fi
-
 # 4. Keyword extraction
 STOP_WORDS='the|a|an|in|on|at|is|it|to|do|be|of|or|and|for|with|that|this|from|into|when|where|what|why|how|its|are|was|has|had|not|but|can|all|new|get|set|run|use|add|fix'
 
@@ -79,7 +90,7 @@ stack_files=$(echo "$prompt" \
   | sed 's|\\|/|g' \
   | head -5)
 
-# 5. File discovery — single pass, inverted search (O(n) not O(n²))
+# 5. File discovery — cached per session, invalidated when cwd mtime changes
 find_code_files() {
   find "$cwd" -type f \
     \( \
@@ -104,12 +115,27 @@ find_code_files() {
     2>/dev/null
 }
 
-_all_code_files=$(find_code_files)
+_cwd_mtime=$(stat -c%Y "$cwd" 2>/dev/null || stat -f%m "$cwd" 2>/dev/null || echo 0)
+_cache_key=$(printf '%s:%s' "$cwd" "$_cwd_mtime" | cksum | cut -d' ' -f1)
+_file_cache="$cache_dir/file-list-${_cache_key}.txt"
+
+if [[ ! -f "$_file_cache" ]]; then
+  find_code_files > "$_file_cache" 2>/dev/null
+  # Prune stale file-list caches (keep only current)
+  find "$cache_dir" -maxdepth 1 -name "file-list-*.txt" ! -name "file-list-${_cache_key}.txt" -delete 2>/dev/null
+fi
+_all_code_files=$(cat "$_file_cache" 2>/dev/null)
 
 relevant_files=()
 
+# Git-aware prioritization — recently changed files are most likely relevant
+while IFS= read -r git_file; do
+  [[ -z "$git_file" ]] && continue
+  [[ -f "$cwd/$git_file" ]] && relevant_files=("$cwd/$git_file" "${relevant_files[@]}")
+done < <(git -C "$cwd" diff --name-only HEAD 2>/dev/null | head -5)
+
 # A. Inverted keyword search — one grep pass across all files for all keywords at once
-if [[ -n "$keywords" ]]; then
+if [[ -n "$keywords" && -n "$_all_code_files" ]]; then
   kw_pattern=$(echo "$keywords" | paste -sd'|')
   while IFS= read -r f; do
     relevant_files+=("$f")
@@ -117,11 +143,12 @@ if [[ -n "$keywords" ]]; then
 fi
 
 # B. Stack trace: explicit file paths in prompt
-for sf in $stack_files; do
+while IFS= read -r sf; do
+  [[ -z "$sf" ]] && continue
   for candidate in "$cwd/$sf" "$sf"; do
     [[ -f "$candidate" ]] && relevant_files+=("$candidate")
   done
-done
+done <<< "$stack_files"
 
 # C. Naming heuristics
 for pattern in auth login user service controller handler repository repo; do
@@ -131,7 +158,7 @@ for pattern in auth login user service controller handler repository repo; do
   done < <(echo "$_all_code_files" | grep -iE "${pattern}" | head -2)
 done
 
-# Deduplicate, verify existence, cap at 5
+# Deduplicate, verify existence, cap at 3
 mapfile -t deduped < <(
   printf '%s\n' "${relevant_files[@]}" \
   | sort -u \
@@ -139,21 +166,10 @@ mapfile -t deduped < <(
   | head -3
 )
 
-# 6. Scored relevance — pick highest-frequency occurrence, not first match
+# 6. Scored relevance — find best matching line number per keyword
 score_line() {
-  local file="$1"
-  local kw="$2"
-  local best_count=0
-  local best_line=0
-  while IFS=: read -r lineno rest; do
-    [[ "$lineno" =~ ^[0-9]+$ ]] || continue
-    count=$(grep -ciE "$kw" "$file" 2>/dev/null || echo 0)
-    if [[ $count -gt $best_count ]]; then
-      best_count=$count
-      best_line=$lineno
-    fi
-  done < <(grep -n -iE "$kw" "$file" 2>/dev/null)
-  echo "$best_line"
+  local file="$1" kw="$2"
+  grep -n -iE "$kw" "$file" 2>/dev/null | head -1 | cut -d: -f1
 }
 
 # 7. Function-aware snippet extraction
@@ -162,10 +178,9 @@ extract_snippet() {
   local anchor="$2"  # line number
   local ext="${file##*.}"
 
-  # For brace-delimited languages: walk back to nearest function/class boundary
   case "$ext" in
     cs|js|ts|tsx|jsx|java|go|rs)
-      # Find the nearest function/class/method declaration at or before anchor
+      # Walk back to nearest function/class/method declaration at or before anchor
       func_start=$(awk -v anchor="$anchor" '
         NR <= anchor && /^\s*(public|private|protected|internal|async|function|func|fn|class|interface|struct|def)\b/ {
           start = NR
@@ -173,7 +188,7 @@ extract_snippet() {
         END { print (start > 0 ? start : anchor) }
       ' "$file" 2>/dev/null)
 
-      # Walk forward from func_start to find closing brace (brace-depth tracking)
+      # Walk forward from func_start to closing brace (brace-depth tracking)
       snippet=$(awk -v s="$func_start" -v max=30 '
         NR < s { next }
         NR == s { depth=0; out=1 }
@@ -189,13 +204,13 @@ extract_snippet() {
       ' "$file" 2>/dev/null)
       ;;
     py)
-      # Python: walk back to nearest def/class, extract until dedent
+      # Walk back to nearest def/class, extract 30 lines
       func_start=$(awk -v anchor="$anchor" '
         NR <= anchor && /^(def |class )/ { start = NR }
         END { print (start > 0 ? start : anchor) }
       ' "$file" 2>/dev/null)
       start=$((func_start > 0 ? func_start : anchor))
-      snippet=$(sed -n "${start},$((start + 30))p" "$file" 2>/dev/null | head -30 | nl -ba -v"$start")
+      snippet=$(sed -n "${start},$((start + 30))p" "$file" 2>/dev/null | nl -ba -v"$start")
       ;;
     *)
       local s=$((anchor - 15)); [[ $s -lt 1 ]] && s=1
@@ -223,7 +238,7 @@ for file in "${deduped[@]}"; do
     [[ "$line" =~ ^[0-9]+$ && $line -gt 0 ]] && { best_line=$line; break; }
   done <<< "$keywords"
 
-  # Fallback: plain words from prompt (≥5 chars)
+  # Fallback: plain words from prompt (>=5 chars)
   if [[ $best_line -eq 0 ]]; then
     while IFS= read -r word; do
       [[ -z "$word" ]] && continue
@@ -262,7 +277,7 @@ elif [[ -f "$cwd/requirements.txt" || -f "$cwd/pyproject.toml" ]]; then
   project_type="python"
 elif [[ -f "$cwd/pom.xml" || -f "$cwd/build.gradle" || -f "$cwd/build.gradle.kts" ]]; then
   project_type="java"
-elif find "$cwd" -maxdepth 2 \( -name "*.sln" -o -name "*.csproj" \) 2>/dev/null | grep -q .; then
+elif find "$cwd" -maxdepth 2 \( -name "*.sln" -o -name "*.csproj" \) -print -quit 2>/dev/null | grep -q .; then
   project_type="dotnet"
 fi
 
@@ -276,35 +291,35 @@ case "$intent" in
 - do not refactor code unrelated to the bug
 - avoid breaking changes"
     output_hint="IF BUG:
-→ root cause (1 line)
-→ fixed code"
+-> root cause (1 line)
+-> fixed code"
     ;;
   feature_request)
     constraints="- follow existing patterns in the codebase
 - do not add unnecessary abstractions
 - keep changes minimal and focused"
     output_hint="IF FEATURE:
-→ final implementation only"
+-> final implementation only"
     ;;
   refactor)
     constraints="- preserve all public signatures and behavior
 - do not introduce new dependencies
 - ensure security and performance are not degraded"
     output_hint="IF REFACTOR:
-→ improved code only"
+-> improved code only"
     ;;
   explain)
     constraints="- reference only the provided files
 - be precise — avoid vague generalizations"
     output_hint="IF EXPLAIN:
-→ precise technical answer (no padding)
-→ relevant code references with line numbers"
+-> precise technical answer (no padding)
+-> relevant code references with line numbers"
     ;;
   *)
     constraints="- analyze ONLY provided files
 - do not assume missing context"
-    output_hint="→ direct answer
-→ relevant code if applicable"
+    output_hint="-> direct answer
+-> relevant code if applicable"
     ;;
 esac
 
@@ -357,8 +372,8 @@ Priority:
 3. Speed
 
 If code is required:
-→ Return code FIRST
-→ Then optional 1–2 line explanation
+-> Return code FIRST
+-> Then optional 1-2 line explanation
 
 Request: ${prompt}
 
@@ -367,7 +382,7 @@ ${constraints}
 - Do not assume missing code
 - Do not invent APIs or methods
 - Use only provided context
-- If unsure → state limitation briefly
+- If unsure -> state limitation briefly
 
 ### OUTPUT FORMAT (STRICT)
 - NO explanations unless necessary
@@ -380,6 +395,17 @@ ${output_hint}
 - Think internally, do not output reasoning
 - Skip analysis steps in response
 - Jump directly to solution"
+
+if [[ "$FORCE_YES_MODE" == "true" ]]; then
+  structured="${structured}
+
+### GLOBAL ANSWER POLICY (OVERRIDE — applies to all reasoning, decisions, suggestions, assumptions)
+- For all yes/no questions -> answer YES
+- Do not ask follow-up binary questions
+- Proceed with affirmative assumptions
+- This overrides normal cautious behavior
+- Does NOT override: security constraints, destructive safeguards, system-level protections"
+fi
 
 # 12. Emit replacement prompt
 jq -n --arg p "$structured" '{"prompt": $p}'

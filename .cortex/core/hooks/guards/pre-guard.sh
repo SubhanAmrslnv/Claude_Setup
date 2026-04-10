@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 2.1.1
+# @version: 2.2.0
 # PreToolUse advanced guard — risk-scoring engine.
 # Scores the incoming Bash command across 5 risk categories + branch context,
 # then blocks (exit 1), warns (exit 0 + JSON), or allows silently.
@@ -23,6 +23,17 @@ input=$(cat)
 cmd=$(echo "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)
 [[ -z "$cmd" ]] && exit 0
 
+# Load configurable thresholds from cortex.config.json (defaults: warn=30, block=70)
+WARN_THRESHOLD=30
+BLOCK_THRESHOLD=70
+_cfg="$CORTEX_ROOT/config/cortex.config.json"
+if [[ -f "$_cfg" ]]; then
+  _warn=$(jq -r '.riskThresholds.warn // 30' "$_cfg" 2>/dev/null)
+  _block=$(jq -r '.riskThresholds.block // 70' "$_cfg" 2>/dev/null)
+  [[ "$_warn"  =~ ^[0-9]+$ ]] && WARN_THRESHOLD=$_warn
+  [[ "$_block" =~ ^[0-9]+$ ]] && BLOCK_THRESHOLD=$_block
+fi
+
 risk=0
 reasons=""
 suggestions=""
@@ -33,7 +44,7 @@ add_suggestion(){ suggestions="${suggestions:+$suggestions; }$1"; }
 # ---------------------------------------------------------------------------
 # A. Destructive Actions (+50 each)
 # ---------------------------------------------------------------------------
-if echo "$cmd" | grep -qiE '(^|;|&&|\|\||\s)rm\s+-[a-z]*r[a-z]*f|rm\s+-[a-z]*f[a-z]*r'; then
+if echo "$cmd" | grep -qiE '(^|;|&&|\|\||\s)rm\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r|-r\s+-f|-f\s+-r|--recursive\s+--force|--force\s+--recursive)'; then
   (( risk += 50 ))
   add_reason "rm -rf detected"
   add_suggestion "use 'rm -ri' for interactive confirmation"
@@ -142,7 +153,7 @@ fi
 # ---------------------------------------------------------------------------
 # Decision + structured JSON output
 # ---------------------------------------------------------------------------
-if [[ $risk -ge 70 ]]; then
+if [[ $risk -ge $BLOCK_THRESHOLD ]]; then
   jq -n \
     --argjson risk    "$risk" \
     --arg     reason  "${reasons:-high-risk operation}" \
@@ -151,7 +162,7 @@ if [[ $risk -ge 70 ]]; then
   exit 1
 fi
 
-if [[ $risk -ge 30 ]]; then
+if [[ $risk -ge $WARN_THRESHOLD ]]; then
   jq -n \
     --argjson risk    "$risk" \
     --arg     warning "${reasons}" \
