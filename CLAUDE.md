@@ -14,20 +14,20 @@ CLAUDE.md                             ← this file; loaded every session
   core/
     hooks/
       guards/
-        pre-guard.sh                  ← PreToolUse guard (risk-scoring engine v2.1.1)
+        pre-guard.sh                  ← PreToolUse guard (risk-scoring engine v2.2.0)
         permission-request.sh         ← PermissionRequest enricher (intent + risks) v1.1.1
         permission-denied.sh          ← PermissionDenied recovery (safe alternatives) v1.1.1
       runtime/
-        post-format.sh                ← registry-driven formatter dispatcher (v2.3.0)
-        post-scan.sh                  ← registry-driven security scanner dispatcher (v2.3.0)
-        post-audit-log.sh             ← appends every tool use to audit.log (v1.1.1)
-        post-code-intel.sh            ← PostToolUse code intelligence (v1.1.1)
-        post-error-analyzer.sh        ← PostToolUseFailure error classifier + fix suggester (v1.0.1)
+        post-format.sh                ← registry-driven formatter dispatcher (v2.4.0)
+        post-scan.sh                  ← registry-driven security scanner dispatcher (v2.5.0)
+        post-audit-log.sh             ← appends every tool use to audit.log (v1.2.0)
+        post-code-intel.sh            ← PostToolUse code intelligence (v1.2.0)
+        post-error-analyzer.sh        ← PostToolUseFailure error classifier + fix suggester (v1.1.0)
         notification.sh               ← Notification aggregator (medium/high severity only) (v1.0.1)
         task-tracker.sh               ← TaskCreated/TaskCompleted → .cortex/cache/tasks.json (v1.0.1)
         stop-build.sh                 ← runs build, reports failures (no auto-fix) (v1.1.1)
-        session-start.sh              ← SessionStart project profiler (v1.1.1)
-        prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine (v1.1.1)
+        session-start.sh              ← SessionStart project profiler (v1.2.0)
+        prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine (v1.6.0)
     runtime/
       command-runner.sh               ← registry-driven command validator/dispatcher (v1.2.0)
     scanners/                         ← 25 language directories (see registry/scanners.json)
@@ -108,11 +108,13 @@ fi
 
 ## Active Hooks
 
-**PreToolUse (`Bash`)** — `guards/pre-guard.sh` (v2.1.1)
+**PreToolUse (`Bash`)** — `guards/pre-guard.sh` (v2.2.0)
 Risk-scoring engine. Accumulates a numeric score across 6 categories, then decides:
-- `risk < 30` → silent allow
-- `risk 30–69` → allow with JSON warning
-- `risk ≥ 70` → block (exit 1) with structured JSON reason + suggestion
+- `risk < warn` → silent allow
+- `risk warn–(block-1)` → allow with JSON warning
+- `risk ≥ block` → block (exit 1) with structured JSON reason + suggestion
+
+Thresholds default to `warn=30 / block=70` and are overridable via `cortex.config.json → riskThresholds`.
 
 Score categories:
 | Category | Examples | Points |
@@ -130,11 +132,11 @@ Fires when a tool requires user approval. Outputs structured JSON — intent cla
 **PermissionDenied** — `guards/permission-denied.sh` (v1.1.1)
 Fires after a permission is denied. Analyzes the denied command, generates a safe alternative, and sets `retry: true/false`. Always exits 0.
 
-**SessionStart** — `runtime/session-start.sh` (v1.1.1)
-Runs when a session begins. Detects project type (dotnet > node > python priority), extracts dependencies, entry points, and folder structure, then writes `.cortex/cache/project-profile.json`. Idempotent via fingerprint; skips rewrite if project files are unchanged.
+**SessionStart** — `runtime/session-start.sh` (v1.2.0)
+Runs when a session begins. Detects project type (dotnet > rust > java > node > go > python priority), extracts dependencies, entry points, and folder structure, then writes `.cortex/cache/project-profile.json`. Idempotent via fingerprint; skips rewrite if project files are unchanged. Prunes scan cache entries older than 7 days on each run.
 
-**UserPromptSubmit** — `runtime/prompt-optimizer.sh` (v1.1.1)
-Intercepts every user prompt (reads from stdin). Detects intent (`bug_fix / feature_request / refactor / question`), finds relevant files via keyword + stack-trace + naming heuristics (cached single `find` pass), extracts ±20-line snippets, loads the project profile, and outputs a structured context-rich prompt replacing the original.
+**UserPromptSubmit** — `runtime/prompt-optimizer.sh` (v1.6.0)
+Intercepts every user prompt (reads from stdin). Detects intent (`bug_fix / feature_request / refactor / question`), finds relevant files via keyword + stack-trace + naming heuristics (cached single `find` pass), extracts ±20-line snippets, loads the project profile, and outputs a structured context-rich prompt replacing the original. Supports `--y` suffix flag: appending `--y` to any prompt strips the flag and injects a `GLOBAL ANSWER POLICY` block that defaults all binary decisions to YES (security and destructive safeguards excluded).
 
 **PostToolUse (`Write|Edit`)** — `runtime/post-format.sh` (v2.3.0)
 Registry-driven: reads `.cortex/registry/scanners.json`, dispatches to all `format.sh` entries matching the file extension.
@@ -142,20 +144,20 @@ Registry-driven: reads `.cortex/registry/scanners.json`, dispatches to all `form
 **PostToolUse (`Write|Edit`)** — `runtime/post-scan.sh` (v2.3.0)
 Registry-driven: always runs the `*` wildcard scanners (generic secret scan), then dispatches to extension-specific security scanners.
 
-**PostToolUse (`Write|Edit`)** — `runtime/post-code-intel.sh` (v1.1.1)
+**PostToolUse (`Write|Edit`)** — `runtime/post-code-intel.sh` (v1.2.0)
 Analyzes modified `.cs .js .ts .jsx .tsx` files (≤1MB). Four checks:
-- **Complexity** — methods >50 lines (brace-depth tracking); nesting depth >3
-- **Duplication** — sliding 8-line window MD5 comparison
+- **Complexity** — methods >50 lines (brace-depth tracking); nesting depth >3 — single combined pass
+- **Duplication** — sliding 6-line window cksum comparison
 - **Naming** — non-descriptive variable names (`temp`, `data`, `obj`, etc.); capped at 3/file
 - **Structure** — files >500 lines; mixed UI + data-access concerns
 
 Outputs structured JSON to stdout. Read-only; never modifies files.
 
-**PostToolUse (`Write|Edit|Bash`)** — `runtime/post-audit-log.sh` (v1.1.1)
-Appends every tool use to `~/.claude/audit.log`.
+**PostToolUse (`Write|Edit|Bash`)** — `runtime/post-audit-log.sh` (v1.2.0)
+Appends every tool use to `~/.claude/audit.log`. Rotates at 5MB (keeps one backup). Concurrency-safe via `flock`.
 
-**PostToolUseFailure** — `runtime/post-error-analyzer.sh` (v1.0.1)
-Fires when a tool invocation fails. Parses stderr, classifies the error type, extracts file/line context, identifies the root cause, and emits a structured fix suggestion. Always exits 0.
+**PostToolUseFailure** — `runtime/post-error-analyzer.sh` (v1.1.0)
+Fires when a tool invocation fails. Single-pass classifier sets error type, root cause, and fix suggestion simultaneously (eliminates double-scan). Classifies: `runtime_error`, `dependency_error`, `permission_error`, `syntax_error`, `build_error`, `network_error`, `timeout_error`. Always exits 0.
 
 **Notification** — `runtime/notification.sh` (v1.0.1)
 Aggregates signals from prior hooks, filters low-severity noise, and emits only medium/high severity actionable notifications. Always exits 0.

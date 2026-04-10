@@ -1,0 +1,1 @@
+{"tool_name":"Bash","stderr":"Unhandled Exception: System.NullReferenceException: Object reference not set to an instance of an object.\n   at MyApp.Service.GetUser() in Service.cs:42"}
