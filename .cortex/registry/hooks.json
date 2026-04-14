@@ -24,7 +24,7 @@
     "source": "core/hooks/runtime/post-audit-log.sh"
   },
   "prompt-optimizer.sh": {
-    "version": "1.7.1",
+    "version": "1.7.2",
     "source": "core/hooks/runtime/prompt-optimizer.sh"
   },
   "session-start.sh": {

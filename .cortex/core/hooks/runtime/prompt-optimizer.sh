@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.7.1
+# @version: 1.7.2
 # UserPromptSubmit optimizer — weighted intent, inverted file search,
 # scored relevance, function-aware snippets, structured output.
 # Exits 0 silently on any failure to avoid blocking input.
@@ -36,16 +36,8 @@ if [[ "$prompt" =~ (^|[[:space:]])--y[[:space:]]*$ ]]; then
   [[ ${#prompt} -lt 3 ]] && exit 0
 fi
 
-# 2. Prompt cache — skip re-processing identical prompts
+# 2. (prompt-cache removed — runs every prompt in-memory)
 cache_dir="$CORTEX_ROOT/cache"
-cache_file="$cache_dir/prompt-cache.txt"
-prompt_hash=$(echo "$prompt" | cksum | cut -d' ' -f1)
-if grep -qF "$prompt_hash" "$cache_file" 2>/dev/null; then
-  exit 0
-fi
-echo "$prompt_hash" >> "$cache_file" 2>/dev/null
-# Keep cache bounded
-tail -200 "$cache_file" > "${cache_file}.tmp" 2>/dev/null && mv "${cache_file}.tmp" "$cache_file" 2>/dev/null
 
 # 3. Weighted intent detection — single awk pass (4x fewer subprocesses)
 read -r score_bug score_refactor score_feature score_explain < <(
@@ -169,16 +161,7 @@ find_code_files() {
     2>/dev/null
 }
 
-_cwd_mtime=$(stat -c%Y "$cwd" 2>/dev/null || stat -f%m "$cwd" 2>/dev/null || echo 0)
-_cache_key=$(printf '%s:%s' "$cwd" "$_cwd_mtime" | cksum | cut -d' ' -f1)
-_file_cache="$cache_dir/file-list-${_cache_key}.txt"
-
-if [[ ! -f "$_file_cache" ]]; then
-  find_code_files > "$_file_cache" 2>/dev/null
-  # Prune stale file-list caches (keep only current)
-  find "$cache_dir" -maxdepth 1 -name "file-list-*.txt" ! -name "file-list-${_cache_key}.txt" -delete 2>/dev/null
-fi
-_all_code_files=$(cat "$_file_cache" 2>/dev/null)
+_all_code_files=$(find_code_files)
 
 relevant_files=()
 
