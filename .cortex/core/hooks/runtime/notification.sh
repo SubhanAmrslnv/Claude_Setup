@@ -58,7 +58,7 @@ while IFS= read -r warn; do
       add_notification "security" "high" "Possible SQL injection risk — use parameterised queries" "$file" ;;
     *http://*|*insecure protocol*)
       add_notification "security" "medium" "Insecure HTTP URL detected — use HTTPS" "$file" ;;
-    *unsafe*|*exec(*|*shell_exec*|*eval()*)
+    *unsafe*|*exec\(*|*shell_exec*|*eval\(\)*)
       add_notification "security" "high" "Unsafe code execution pattern detected" "$file" ;;
     *)
       [[ -n "$msg" ]] && add_notification "security" "medium" "$msg" "$file" ;;

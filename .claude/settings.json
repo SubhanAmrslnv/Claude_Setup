@@ -18,14 +18,6 @@
           {
             "type": "command",
             "command": "bash ${CORTEX_ROOT:-$HOME/.cortex}/core/hooks/runtime/post-format.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ${CORTEX_ROOT:-$HOME/.cortex}/core/hooks/runtime/post-scan.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ${CORTEX_ROOT:-$HOME/.cortex}/core/hooks/runtime/post-code-intel.sh"
           }
         ]
       },
@@ -45,26 +37,6 @@
           {
             "type": "command",
             "command": "bash ${CORTEX_ROOT:-$HOME/.cortex}/core/hooks/runtime/stop-build.sh"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CORTEX_ROOT:-$HOME/.cortex}/core/hooks/runtime/session-start.sh"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CORTEX_ROOT:-$HOME/.cortex}/core/hooks/runtime/prompt-optimizer.sh"
           }
         ]
       }

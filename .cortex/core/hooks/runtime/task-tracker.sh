@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.0.1
+# @version: 1.0.2
 # TaskCreated / TaskCompleted hook — persists tasks to .cortex/cache/tasks.json.
 # Reads payload from stdin. Always exits 0.
 
@@ -15,12 +15,24 @@ command -v jq &>/dev/null || exit 0
 input=$(cat)
 [[ -z "$input" ]] && exit 0
 
-# Determine which event fired via HOOK_EVENT or payload field
 event="${HOOK_EVENT:-}"
-[[ -z "$event" ]] && event=$(echo "$input" | jq -r '.hook_event // .event // empty' 2>/dev/null)
+
+# ─── Single-pass input extraction (7 jq spawns → 2) ─────────────────────────
+mapfile -t _f < <(echo "$input" | jq -r '
+  (.hook_event // .event // ""),
+  (.cwd // ""),
+  (.task.id // .id // ""),
+  (.task.title // .title // "Untitled task"),
+  (.task.status // .status // ""),
+  (.task.priority // .priority // "normal"),
+  (.task.agent // .agent_source // "")
+' 2>/dev/null)
+[[ -z "$event" ]] && event="${_f[0]:-}"
+cwd="${_f[1]:-}"; task_id="${_f[2]:-}"; title="${_f[3]:-Untitled task}"
+status="${_f[4]:-}"; priority="${_f[5]:-normal}"; agent="${_f[6]:-}"
+files=$(echo "$input" | jq -c '.task.related_files // .related_files // []' 2>/dev/null)
 
 # Resolve tasks file relative to cwd or CORTEX_ROOT
-cwd=$(echo "$input" | jq -r '.cwd // empty' 2>/dev/null)
 [[ -z "$cwd" || ! -d "$cwd" ]] && cwd=$(pwd)
 TASKS_FILE="$cwd/.cortex/cache/tasks.json"
 mkdir -p "$(dirname "$TASKS_FILE")"
@@ -46,20 +58,13 @@ now=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
 
 # ─── TaskCreated ─────────────────────────────────────────────────────────────
 if [[ "$event" == "TaskCreated" || "$event" == "task_created" ]]; then
-  task_id=$(echo "$input"    | jq -r '.task.id    // .id    // empty' 2>/dev/null)
-  title=$(echo "$input"      | jq -r '.task.title // .title // empty' 2>/dev/null)
-  status=$(echo "$input"     | jq -r '.task.status // "pending"'      2>/dev/null)
-  priority=$(echo "$input"   | jq -r '.task.priority // .priority // "normal"' 2>/dev/null)
-  agent=$(echo "$input"      | jq -r '.task.agent // .agent_source // empty'   2>/dev/null)
-  files=$(echo "$input"      | jq -c '.task.related_files // .related_files // []' 2>/dev/null)
+  [[ -z "$status" ]] && status="pending"
+  [[ -z "$title"  ]] && title="Untitled task"
 
   # Generate ID if missing
   if [[ -z "$task_id" ]]; then
     task_id="task-$(date -u +%s)-$$"
   fi
-
-  # Title fallback
-  [[ -z "$title" ]] && title="Untitled task"
 
   # Prevent duplicate ID
   exists=$(jq --arg id "$task_id" '[.tasks[] | select(.id == $id)] | length' "$TASKS_FILE")
@@ -107,8 +112,6 @@ fi
 
 # ─── TaskCompleted ────────────────────────────────────────────────────────────
 if [[ "$event" == "TaskCompleted" || "$event" == "task_completed" ]]; then
-  task_id=$(echo "$input" | jq -r '.task.id // .id // empty' 2>/dev/null)
-
   if [[ -z "$task_id" ]]; then
     jq -n '{"success":false,"error":"Missing task id"}'
     exit 0
@@ -139,8 +142,7 @@ fi
 
 # ─── TaskUpdated (status change mid-lifecycle) ────────────────────────────────
 if [[ "$event" == "TaskUpdated" || "$event" == "task_updated" ]]; then
-  task_id=$(echo "$input" | jq -r '.task.id // .id // empty' 2>/dev/null)
-  new_status=$(echo "$input" | jq -r '.task.status // .status // empty' 2>/dev/null)
+  new_status="$status"   # already extracted in single-pass above
 
   if [[ -z "$task_id" || -z "$new_status" ]]; then
     jq -n '{"success":false,"error":"Missing task id or status"}'
