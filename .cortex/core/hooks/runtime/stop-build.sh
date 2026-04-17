@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# @version: 1.2.0
+# @version: 1.4.0
 # Stop hook — detects project type, runs the build, streams output, reports failures.
-# Does NOT auto-fix. On failure: summarize errors, suggest manual review, exit 1.
+# Skips build if project is already running (debug/dev session active).
+# Retries up to 3 times before giving up. Does NOT auto-fix.
 
 set -uo pipefail
 
@@ -74,6 +75,55 @@ detect_build_cmd() {
   fi
 }
 
+# Checks if the project's runtime process is already active (debug / dev server running).
+# Uses pgrep when available; falls back to ps for Git Bash on Windows.
+_proc_match() {
+  if command -v pgrep &>/dev/null; then
+    pgrep -fi "$1" &>/dev/null
+  else
+    ps aux 2>/dev/null | grep -i "$1" | grep -qv "grep"
+  fi
+}
+
+is_project_running() {
+  local project_name
+  project_name=$(basename "$(pwd)")
+
+  # .NET — dotnet run / watch, or the compiled binary executing
+  if echo "$_csproj_files" | grep -q .; then
+    _proc_match "dotnet.*(run|watch)" && return 0
+    _proc_match "${project_name}\.(exe|dll)" && return 0
+  fi
+
+  # Node — dev servers, watchers, or node running a project script
+  if [[ -f package.json ]]; then
+    _proc_match "nodemon|webpack-dev-server|vite|next dev|expo start|ts-node" && return 0
+    _proc_match "node.*${project_name}" && return 0
+  fi
+
+  # Go — compiled binary running from this directory
+  if [[ -f go.mod ]]; then
+    _proc_match "(^|/)${project_name}( |$)" && return 0
+  fi
+
+  # Rust — compiled binary running from this directory
+  if [[ -f Cargo.toml ]]; then
+    _proc_match "(^|/)${project_name}( |$)" && return 0
+  fi
+
+  # Python — common WSGI/ASGI servers or dev server
+  if [[ -f requirements.txt || -f pyproject.toml || -f setup.py ]]; then
+    _proc_match "uvicorn|gunicorn|flask.*run|manage\.py.*runserver|hypercorn" && return 0
+  fi
+
+  # Java — jar running or Spring Boot dev server
+  if [[ -f pom.xml || -f build.gradle || -f build.gradle.kts ]]; then
+    _proc_match "java.*(${project_name}|spring-boot)" && return 0
+  fi
+
+  return 1
+}
+
 build_cmd=$(detect_build_cmd)
 
 if [[ -z "${build_cmd:-}" ]]; then
@@ -83,6 +133,12 @@ fi
 
 if [[ "$build_cmd" == skip:* ]]; then
   echo "[build] Skipping: ${build_cmd#skip:}"
+  exit 0
+fi
+
+# Skip build if a dev/debug session is already running
+if is_project_running; then
+  echo "[build] Project is currently running — skipping build"
   exit 0
 fi
 
@@ -145,35 +201,42 @@ echo "--------------------------------"
 echo "$build_cmd"
 echo "--------------------------------"
 
-# Stream output in real-time AND capture for analysis
 tmp_log=$(mktemp)
 trap 'rm -f "$tmp_log"' EXIT
 
-set +e
-timeout 120 bash -c "$build_cmd" 2>&1 | tee "$tmp_log"
-build_exit=${PIPESTATUS[0]}
-set -e
+MAX_ATTEMPTS=3
+attempt=0
+build_exit=1
 
+while [[ $attempt -lt $MAX_ATTEMPTS ]]; do
+  attempt=$(( attempt + 1 ))
+  echo "[build] Attempt $attempt of $MAX_ATTEMPTS"
+
+  set +e
+  timeout 120 bash -c "$build_cmd" 2>&1 | tee "$tmp_log"
+  build_exit=${PIPESTATUS[0]}
+  set -e
+
+  # Timeout
+  if [[ $build_exit -eq 124 ]]; then
+    echo "[build] Build TIMEOUT after 120s on attempt $attempt" >&2
+    [[ $attempt -lt $MAX_ATTEMPTS ]] && echo "[build] Retrying..." && continue
+    echo "[build] All $MAX_ATTEMPTS attempts timed out — stopping" >&2
+    exit 1
+  fi
+
+  if [[ $build_exit -eq 0 ]]; then
+    echo "[build] Build succeeded on attempt $attempt"
+    exit 0
+  fi
+
+  echo "[build] Attempt $attempt failed" >&2
+  [[ $attempt -lt $MAX_ATTEMPTS ]] && echo "[build] Retrying..."
+done
+
+# All attempts exhausted — summarize errors
 build_output=$(cat "$tmp_log")
-
-# Timeout
-if [[ $build_exit -eq 124 ]]; then
-  echo "[build] Build TIMEOUT after 120s — process killed" >&2
-  exit 1
-fi
-
-# No-op detection
-if [[ -z "$build_output" ]]; then
-  echo "[build] No output produced — possible no-op build"
-fi
-
-if [[ $build_exit -eq 0 ]]; then
-  echo "[build] Build succeeded"
-  exit 0
-fi
-
-# Failure — summarize key errors then show full log
-echo "[build] Build FAILED — fix manually, do not auto-patch:" >&2
+echo "[build] Build FAILED after $MAX_ATTEMPTS attempts — fix manually, do not auto-patch:" >&2
 echo "---" >&2
 errors=$(grep -iE "^\s*(error|fail|exception|fatal)" "$tmp_log" 2>/dev/null | head -20)
 if [[ -n "$errors" ]]; then
@@ -181,7 +244,7 @@ if [[ -n "$errors" ]]; then
   echo "$errors" >&2
   echo "---" >&2
 fi
-echo "[build] Full output:" >&2
+echo "[build] Full output (last attempt):" >&2
 echo "$build_output" >&2
 echo "---" >&2
 exit 1

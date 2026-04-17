@@ -25,7 +25,7 @@ CLAUDE.md                             ← this file; loaded every session
         post-error-analyzer.sh        ← PostToolUseFailure error classifier + fix suggester (v1.1.0)
         notification.sh               ← Notification aggregator (medium/high severity only) (v1.0.1)
         task-tracker.sh               ← TaskCreated/TaskCompleted → .cortex/cache/tasks.json (v1.0.1)
-        stop-build.sh                 ← runs build, reports failures (no auto-fix) (v1.1.1)
+        stop-build.sh                 ← skips if project running, retries build 3x, reports failures (no auto-fix) (v1.4.0)
         session-start.sh              ← SessionStart project profiler (v1.2.0)
         prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine (v1.6.0)
     runtime/
@@ -170,8 +170,8 @@ Aggregates signals from prior hooks, filters low-severity noise, and emits only 
 **TaskCreated / TaskCompleted** — `runtime/task-tracker.sh` (v1.0.1)
 Persists task lifecycle events to `.cortex/cache/tasks.json`. Fires on both task creation and task completion. Always exits 0.
 
-**Stop** — `runtime/stop-build.sh` (v1.1.1)
-Runs directly from `.cortex/core/hooks/runtime/stop-build.sh`. Detects project type, runs the build, prints errors on failure. Does NOT auto-fix.
+**Stop** — `runtime/stop-build.sh` (v1.4.0)
+Runs directly from `.cortex/core/hooks/runtime/stop-build.sh`. Detects project type. Skips the build entirely if the project's runtime process is already active (debug/dev server running). Otherwise retries the build up to 3 times before giving up, prints errors on failure. Does NOT auto-fix.
 
 ---
 
