@@ -1,6 +1,6 @@
 # Commands
 
-All commands are invoked inside Claude Code as `/command-name`. Each command is implemented as a Markdown file in `.cortex/commands/` and validated against `.cortex/registry/commands.json` before execution.
+All commands are invoked inside Claude Code as `/command-name`. Each command is implemented as a Markdown file in `.claude/commands/` and validated against `.claude/registry/commands.json` before execution.
 
 ---
 
@@ -95,9 +95,9 @@ All commands are invoked inside Claude Code as `/command-name`. Each command is 
 
 **What it does:**
 1. Fetches changes from the remote repository
-2. Shows a diff of what changed in `.cortex/base/`
+2. Shows a diff of what changed in `.claude/base/`
 3. Requires confirmation before applying
-4. Updates `.cortex/base/` only — `.cortex/local/` overrides are never touched
+4. Updates `.claude/base/` only — `.claude/local/` overrides are never touched
 5. Re-runs `/init-cortex` to redeploy any updated hooks
 
 **Usage example:**
@@ -142,7 +142,7 @@ All commands are invoked inside Claude Code as `/command-name`. Each command is 
 | `--since=<ref>` | Restrict analysis to changes since a git ref |
 | `--deep` | Run extended checks before comparing |
 
-**What it does:** Issues are fingerprinted for stable cross-session comparison. New issues and escalated severities since the snapshot commit are reported as regressions; root cause is traced via `git log` between snapshot commit and HEAD. State stored in `.cortex/state/snapshot.json`.
+**What it does:** Issues are fingerprinted for stable cross-session comparison. New issues and escalated severities since the snapshot commit are reported as regressions; root cause is traced via `git log` between snapshot commit and HEAD. State stored in `.claude/state/snapshot.json`.
 
 **Usage example:**
 ```
@@ -316,8 +316,8 @@ A FIX recommendation is generated only for DEGRADED state.
 
 **Usage example:**
 ```
-/timeline --file=.cortex/core/hooks/guards/pre-guard.sh
-/timeline --module=.cortex/core/hooks/runtime --depth=50
+/timeline --file=.claude/core/hooks/guards/pre-guard.sh
+/timeline --module=.claude/core/hooks/runtime --depth=50
 ```
 
 ---
@@ -419,16 +419,6 @@ checkout total is wrong /debug
 
 ## Adding new commands
 
-1. Create `<command>.md` in `.cortex/commands/` with the full implementation
-2. Create a thin wrapper `<command>.md` in `.claude/commands/` delegating to the command-runner
-3. Add the command name to `.cortex/registry/commands.json`
-4. Run `/init-cortex` to validate the registry
-
-Thin wrapper format:
-```markdown
-This is a thin wrapper. The implementation lives in `.cortex/commands/<command>.md`.
-
-1. Run `bash ${CORTEX_ROOT:-$HOME/.cortex}/core/runtime/command-runner.sh <command>`
-2. Read the file path returned by the runner.
-3. Read that file and follow its instructions exactly.
-```
+1. Create `<command>.md` in `.claude/commands/` with the full implementation
+2. Add the command name to `.claude/registry/commands.json`
+3. Run `/init-cortex` to validate the registry

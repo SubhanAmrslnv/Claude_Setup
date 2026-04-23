@@ -14,7 +14,7 @@ To manually test a hook outside Claude Code:
 
 ```bash
 echo '{"tool":"Bash","input":{"command":"git push --force origin main"}}' \
-  | bash ~/.cortex/core/hooks/guards/pre-guard.sh
+  | bash ~/.claude/core/hooks/guards/pre-guard.sh
 ```
 
 ---
@@ -23,12 +23,12 @@ echo '{"tool":"Bash","input":{"command":"git push --force origin main"}}' \
 
 | Option | Where | Effect |
 |---|---|---|
-| `CORTEX_ROOT` | Environment variable | Overrides the `.cortex/` location used by all hooks |
-| `.cortex/local/` | Directory | Place project-specific overrides here; never touched by updates |
-| `.cortex/config/cortex.config.json` | File | Framework version and default runtime paths |
+| `CORTEX_ROOT` | Environment variable | Overrides the `.claude/` location used by all hooks |
+| `.claude/local/` | Directory | Place project-specific overrides here; never touched by updates |
+| `.claude/config/cortex.config.json` | File | Framework version and default runtime paths; `riskThresholds` is overridable |
 | `.claude/settings.json` | File | Hook event wiring; edit only to add or remove hook events |
 
-To add a project-specific override without modifying the base framework, create the override file under `.cortex/local/` using the same relative path as the original.
+To add a project-specific override without modifying the base framework, create the override file under `.claude/local/` using the same relative path as the original.
 
 ---
 
@@ -114,7 +114,7 @@ Files are scored by `(change_freq × 3) + (size_lines / 50) + (dep_count × 2)`.
 1. Verify `.claude/settings.json` exists in your project root
 2. Run `/doctor` — it will identify missing or misconfigured hooks
 3. Check that `jq` is on `$PATH`: `jq --version`
-4. Verify `CORTEX_ROOT` resolves correctly: `echo ${CORTEX_ROOT:-$HOME/.cortex}`
+4. Verify `CORTEX_ROOT` resolves correctly: `echo ${CORTEX_ROOT:-$(pwd)/.claude}`
 
 ### `/doctor` reports version mismatch
 
@@ -132,10 +132,16 @@ Files are scored by `(change_freq × 3) + (size_lines / 50) + (dep_count × 2)`.
 
 **Symptom:** A safe Bash command is blocked with risk score ≥70.
 
-**Resolution:** Review the structured JSON reason output. If the block is incorrect, adjust the command to avoid the flagged pattern (e.g., use `git push` without `--force`). Do not bypass the guard with `--no-verify`.
+**Resolution:** Review the structured JSON reason output. If the block is incorrect, adjust the command to avoid the flagged pattern (e.g., use `git push` without `--force`). To lower thresholds, edit `riskThresholds` in `.claude/config/cortex.config.json`. Do not bypass the guard with `--no-verify`.
 
 ### Session profiling skips on every start
 
 **Symptom:** `project-profile.json` is never updated even after changing dependencies.
 
-**Resolution:** `session-start.sh` uses a fingerprint to skip unchanged projects. Delete `.cortex/cache/project-profile.json` to force a fresh profile on next session start.
+**Resolution:** `session-start.sh` uses a fingerprint to skip unchanged projects. Delete `.claude/cache/project-profile.json` to force a fresh profile on next session start.
+
+### Scan cache is returning stale results
+
+**Symptom:** Security scanner reports an issue in a file that has been fixed.
+
+**Resolution:** Delete `.claude/cache/scans/` to clear the hash-based scan cache. It will be rebuilt on the next file write. Entries also auto-prune after 7 days.

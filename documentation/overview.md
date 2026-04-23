@@ -15,7 +15,7 @@ Developers and teams using Claude Code who want automated safeguards, consistent
 ## Key capabilities
 
 - **Risk-scored command gating** — pre-guard scores every Bash command across 6 risk categories (destructive ops, privilege escalation, dangerous flags, security threats, sensitive files, protected branches) and blocks, warns, or silently allows based on score thresholds
-- **Registry-driven security scanning** — 25 language scanners triggered automatically on every file write, dispatched by file extension from a central registry
+- **Registry-driven security scanning** — 25 language scanners triggered automatically on every file write, dispatched by file extension from `.claude/registry/scanners.json`
 - **Registry-driven formatting** — format scripts for all supported languages run on every Edit/Write without per-project configuration
 - **Audit logging** — every tool use appended to `~/.claude/audit.log` for full session traceability
 - **Code intelligence** — post-write analysis of `.cs`, `.js`, `.ts`, `.jsx`, `.tsx` files for complexity, duplication, naming, and structural issues

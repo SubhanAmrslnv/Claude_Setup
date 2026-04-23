@@ -6,7 +6,7 @@ Cortex is a modular Claude DevOps configuration framework: a portable system of 
 
 ## Quick Start
 
-1. Clone the repository and copy `.cortex/` to `~/.cortex/` (or any location; set `$CORTEX_ROOT` if non-standard)
+1. Clone the repository and copy `.claude/` to `~/.claude/` (or any location; set `$CORTEX_ROOT` if non-standard)
 2. Copy `.claude/` into the root of each project you want Cortex active in
 3. Open Claude Code in that project and run `/init-cortex`
 4. Run `/doctor` to verify the install

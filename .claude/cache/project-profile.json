@@ -1,0 +1,21 @@
+{
+  "fingerprint": "01b49d86c664576a3382cfeda7835b6e",
+  "project_type": "unknown",
+  "generated_at": "2026-04-23T12:22:57Z",
+  "dependencies": [],
+  "entry_points": [],
+  "structure": [
+    ".",
+    "./.claude",
+    "./.claude/cache",
+    "./.claude/commands",
+    "./.claude/config",
+    "./.claude/core",
+    "./.claude/local",
+    "./.claude/registry",
+    "./.claude/test",
+    "./.claude/worktrees",
+    "./.git",
+    "./documentation"
+  ]
+}

@@ -7,7 +7,6 @@
 | [Claude Code](https://claude.ai/code) | Any | Yes | Runs all hooks and commands |
 | `bash` | 4.0+ | Yes | All hook scripts are bash |
 | `jq` | 1.7+ | Yes | JSON parsing in every hook; without it all scanning and guard logic silently no-ops |
-| `node` | 16+ | Yes | `post-code-intel.sh` code intelligence analysis |
 | `git` | Any | Yes | Branch detection in pre-guard, commit command, and all analysis commands |
 
 ### Installing jq
@@ -47,49 +46,39 @@ Or copy it to any stable location on your machine.
 
 **Option A — Global install (recommended)**
 
-Copy `.cortex/` to `~/.cortex/` so hooks fall back to it automatically without any environment variable:
+Copy `.claude/` to `~/.claude/` so hooks fall back to it automatically without any environment variable. Claude Code already uses `~/.claude/` as its global config directory, so this is the natural home for the framework:
 
 ```bash
-cp -r ~/cortex/.cortex ~/.cortex
+cp -r ~/cortex/.claude ~/.claude
 ```
 
 Or use a symlink to stay in sync with the repo:
 
 ```bash
-ln -s ~/cortex/.cortex ~/.cortex
+ln -s ~/cortex/.claude ~/.claude
 ```
 
 **Option B — Project-local install**
 
-Copy `.cortex/` into the root of a specific project. Cortex detects `$(pwd)/.cortex` at session start and uses it automatically:
+Copy `.claude/` into the root of a specific project. Cortex detects `$(pwd)/.claude` at session start and uses it automatically:
 
 ```bash
-cp -r ~/cortex/.cortex /path/to/your/project/.cortex
+cp -r ~/cortex/.claude /path/to/your/project/.claude
 ```
 
 **Option C — Environment variable (CI/CD, Docker, custom paths)**
 
-Set `CORTEX_ROOT` to the absolute path of the `.cortex/` directory:
+Set `CORTEX_ROOT` to the absolute path of the `.claude/` directory:
 
 ```bash
-export CORTEX_ROOT="/custom/path/to/.cortex"
+export CORTEX_ROOT="/custom/path/to/.claude"
 ```
 
 Add this to `~/.bashrc`, `~/.zshrc`, or your CI environment for persistent use.
 
-Resolution priority: `$CORTEX_ROOT` → `$(pwd)/.cortex` → `$HOME/.cortex`
+Resolution priority: `$CORTEX_ROOT` → `$(pwd)/.claude` → `$HOME/.claude`
 
-### 3. Copy `.claude/` into your project
-
-The adapter layer must be present in the root of each project where you want Cortex active:
-
-```bash
-cp -r ~/cortex/.claude /path/to/your/project/
-```
-
-This folder contains only `settings.json` (hook wiring) and thin command wrappers. All logic runs from `CORTEX_ROOT`.
-
-### 4. Deploy hooks
+### 3. Deploy hooks
 
 Open Claude Code in your project directory and run:
 
@@ -105,11 +94,11 @@ This command version-compares each hook source against the deployed runtime, dep
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `CORTEX_ROOT` | No | `$HOME/.cortex` | Absolute path to the `.cortex/` directory. Set when using a non-standard install location. |
+| `CORTEX_ROOT` | No | `$(pwd)/.claude` → `$HOME/.claude` | Absolute path to the `.claude/` directory. Set when using a non-standard install location. |
 
 No secrets or API keys are required. Cortex runs entirely locally.
 
-The framework version and runtime paths are stored in `.cortex/config/cortex.config.json`. You should not need to edit this file directly.
+The framework version and runtime paths are stored in `.claude/config/cortex.config.json`. You should not need to edit this file directly. Risk thresholds (`warn=30`, `block=70`) can be overridden per-project by editing `riskThresholds` in this file.
 
 ---
 
@@ -125,14 +114,22 @@ This checks:
 - All hooks are deployed and match registry versions
 - `settings.json` wires every hook correctly
 - All scanner scripts exist and are executable
-- `jq` and `node` are available on `$PATH`
+- `jq` is available on `$PATH`
 
 Expected output: all checks green. If any check fails, run `/doctor --fix` to apply safe automated fixes.
 
 To verify a specific hook manually:
 
 ```bash
-echo '{"tool":"Bash","input":{"command":"rm -rf /"}}' | bash ~/.cortex/core/hooks/guards/pre-guard.sh
+echo '{"tool":"Bash","input":{"command":"rm -rf /"}}' | bash ~/.claude/core/hooks/guards/pre-guard.sh
 ```
 
 Expected: exit 1 with a structured JSON block reason.
+
+To run the full smoke test suite:
+
+```bash
+bash .claude/test/run.sh
+```
+
+Runs 13 fixture-based tests covering pre-guard, post-error-analyzer, and post-scan. All should pass on a correctly installed system.
