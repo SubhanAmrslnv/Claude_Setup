@@ -16,11 +16,11 @@
     "source": "core/hooks/guards/permission-denied.sh"
   },
   "session-start.sh": {
-    "version": "1.3.0",
+    "version": "1.4.0",
     "source": "core/hooks/runtime/session-start.sh"
   },
   "prompt-optimizer.sh": {
-    "version": "2.0.0",
+    "version": "3.0.0",
     "source": "core/hooks/runtime/prompt-optimizer.sh"
   },
   "post-format.sh": {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# @version: 1.3.0
-# SessionStart project profiler — detects project type, extracts deps, entry points,
-# folder structure; writes .claude/cache/project-profile.json.
+# @version: 1.4.0
+# SessionStart project profiler — detects project type, framework, arch, extracts deps,
+# entry points, folder structure; writes .claude/cache/project-profile.json.
 # Idempotent via fingerprint. Prunes scan cache using configurable TTL (default 30 days).
 
 source "${CORTEX_ROOT:-$(pwd)/.claude}/core/shared/bootstrap.sh" || exit 0
@@ -131,10 +131,69 @@ structure=$(find . -maxdepth 2 -type d \
   2>/dev/null | sort | head -40 \
   | jq -Rs '[split("\n")[] | select(. != "")]')
 
+# ── Framework detection (uses already-computed deps + project_type) ───────────
+_detect_framework() {
+  local _dl
+  _dl=$(echo "$deps" | jq -r '.[]' 2>/dev/null | tr '[:upper:]' '[:lower:]')
+  case "$project_type" in
+    node)
+      echo "$_dl" | grep -q "react"     && { echo "react";   return; }
+      echo "$_dl" | grep -q "vue"       && { echo "vue";     return; }
+      echo "$_dl" | grep -q "angular"   && { echo "angular"; return; }
+      echo "$_dl" | grep -q "next"      && { echo "nextjs";  return; }
+      echo "$_dl" | grep -q "nuxt"      && { echo "nuxt";    return; }
+      echo "$_dl" | grep -q "express"   && { echo "express"; return; }
+      echo "$_dl" | grep -q "fastify"   && { echo "fastify"; return; }
+      echo "$_dl" | grep -q "hono"      && { echo "hono";    return; }
+      ;;
+    python)
+      echo "$_dl" | grep -q "django"    && { echo "django";  return; }
+      echo "$_dl" | grep -q "fastapi"   && { echo "fastapi"; return; }
+      echo "$_dl" | grep -q "flask"     && { echo "flask";   return; }
+      ;;
+    dotnet)
+      echo "$_dl" | grep -qi "aspnetcore"         && { echo "aspnetcore"; return; }
+      echo "$_dl" | grep -qi "entityframeworkcore" && { echo "ef-core";   return; }
+      ;;
+    java)
+      echo "$_dl" | grep -q "spring"    && { echo "spring-boot"; return; }
+      echo "$_dl" | grep -q "quarkus"   && { echo "quarkus";     return; }
+      ;;
+    go)
+      [[ -f go.mod ]] && {
+        grep -q "gin-gonic"   go.mod 2>/dev/null && { echo "gin";   return; }
+        grep -q "labstack"    go.mod 2>/dev/null && { echo "echo";  return; }
+        grep -q "gofiber"     go.mod 2>/dev/null && { echo "fiber"; return; }
+      }
+      ;;
+  esac
+  echo ""
+}
+
+# ── Architecture pattern detection (uses already-computed structure) ───────────
+_detect_arch() {
+  local _dirs
+  _dirs=$(echo "$structure" | jq -r '.[]' 2>/dev/null | tr '[:upper:]' '[:lower:]')
+  if echo "$_dirs" | grep -q "controller" && echo "$_dirs" | grep -q "service"; then
+    if echo "$_dirs" | grep -qE "repositor|data"; then echo "mvc"; return; fi
+    echo "layered"; return
+  fi
+  if echo "$_dirs" | grep -q "domain" && echo "$_dirs" | grep -q "application"; then
+    echo "clean"; return
+  fi
+  if echo "$_dirs" | grep -qE "feature|module"; then echo "feature-slice"; return; fi
+  echo ""
+}
+
+framework=$(_detect_framework)
+arch=$(_detect_arch)
+
 # ── Write profile ─────────────────────────────────────────────────────────────
 jq -n \
   --arg fp        "$current_fp" \
   --arg type      "$project_type" \
+  --arg fw        "$framework" \
+  --arg ar        "$arch" \
   --arg ts        "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson deps      "$deps" \
   --argjson entry     "$entry_points" \
@@ -142,6 +201,8 @@ jq -n \
   '{
     fingerprint:  $fp,
     project_type: $type,
+    framework:    $fw,
+    arch:         $ar,
     generated_at: $ts,
     dependencies: $deps,
     entry_points: $entry,

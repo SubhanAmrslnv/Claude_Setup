@@ -32,8 +32,8 @@ CLAUDE.md                             ← this file; loaded every session
         notification.sh               ← Notification aggregator (medium/high severity only) (v1.1.0)
         task-tracker.sh               ← TaskCreated/TaskCompleted → .claude/cache/tasks.json (v1.1.0)
         stop-build.sh                 ← skips if project running, retries build 3x, reports failures (v1.5.0)
-        session-start.sh              ← SessionStart project profiler (v1.3.0)
-        prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine (v2.0.0)
+        session-start.sh              ← SessionStart project profiler (v1.4.0)
+        prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine (v3.0.0)
     runtime/
       command-runner.sh               ← registry-driven command validator/dispatcher (v1.2.0)
     scanners/                         ← 25 language directories (see registry/scanners.json)
@@ -133,11 +133,11 @@ Fires when a tool requires user approval. Outputs structured JSON — intent cla
 **PermissionDenied** — `guards/permission-denied.sh` (v1.2.0)
 Fires after a permission is denied. Analyzes the denied command, generates a safe alternative, and sets `retry: true/false`. Always exits 0.
 
-**SessionStart** — `runtime/session-start.sh` (v1.3.0)
-Runs when a session begins. Detects project type (dotnet > rust > java > node > go > python priority), extracts dependencies, entry points, and folder structure, then writes `.claude/cache/project-profile.json`. Idempotent via fingerprint; skips rewrite if project files are unchanged. Prunes scan cache entries using configurable TTL read from `cortex.config.json → cache.scanTtlDays` (default 30 days). Also removes zero-byte/corrupt cache entries on each run.
+**SessionStart** — `runtime/session-start.sh` (v1.4.0)
+Runs when a session begins. Detects project type (dotnet > rust > java > node > go > python priority), framework (react/express/django/spring-boot/gin/…), and architecture pattern (mvc/clean/layered/feature-slice). Extracts dependencies, entry points, and folder structure, then writes `.claude/cache/project-profile.json` (includes `framework` and `arch` slim fields consumed by prompt-optimizer). Idempotent via fingerprint; skips rewrite if project files are unchanged. Prunes scan cache entries using configurable TTL read from `cortex.config.json → cache.scanTtlDays` (default 30 days). Also removes zero-byte/corrupt cache entries on each run.
 
-**UserPromptSubmit** — `runtime/prompt-optimizer.sh` (v2.0.0)
-Intercepts every user prompt. Skips enrichment if prompt exceeds 6000 chars (already context-rich). Detects intent (`bug_fix / feature_request / refactor / question`), finds the top-2 most relevant files via keyword + stack-trace heuristics (single `find` pass, minimum relevance score enforced), extracts ±10-line snippets (capped at 80 total lines across all files), uses a single combined-keyword grep per file (avoids N-per-keyword subprocess spawning). Supports `--y` suffix flag: strips the flag and injects `GLOBAL ANSWER POLICY` (YES-default, security safeguards excluded).
+**UserPromptSubmit** — `runtime/prompt-optimizer.sh` (v3.0.0)
+Intercepts every user prompt. Skips enrichment if prompt exceeds 6000 chars. Detects intent, expands keywords via a static alias dictionary (auth→login/jwt/token, etc.), scores files using keyword×filename (+3), stack-trace references (+5), git-changed preload (+4), and intent-layer patterns (+2; Service/Controller/Repository per intent). Hard caps: `max_files=2`, `max_total_lines=60`, intent-based snippet radius (bug_fix=12, feature_request=8, refactor=6, question=5). Noise paths (Tests, Migrations, Generated, dist, build) filtered unless prompt targets them. Same-basename deduplication prefers `UserService` over `IUserService`. Structural summary (types, methods, deps) prepended to each file's focused snippet. Static guidance blocks (root-cause-first / contract-first / behavior-preservation) injected by intent. Reads slim fields (`project_type`, `framework`, `arch`) from profile. Supports `--y` suffix: injects `GLOBAL ANSWER POLICY` (YES-default, destructive safeguards excluded).
 
 **PostToolUse (`Write|Edit`)** — `runtime/post-format.sh` (v2.5.0)
 Registry-driven: reads `.claude/registry/scanners.json`, dispatches to all `format.sh` entries matching the file extension.

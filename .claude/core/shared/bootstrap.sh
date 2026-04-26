@@ -10,7 +10,7 @@
 # Returns 1 on fatal error so the caller's || exit 0 handles it gracefully.
 
 # ── CORTEX_ROOT: strictly project-local, no global fallback ──────────────────
-if [ -z "$CORTEX_ROOT" ]; then
+if [ -z "${CORTEX_ROOT:-}" ]; then
   export CORTEX_ROOT="$(pwd)/.claude"
 fi
 
