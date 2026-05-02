@@ -172,7 +172,11 @@ IS_FRONTEND     = true | false
 
 Before reading any code, locate the relevant files on disk.
 
-Use Grep and Glob to find files related to `ENTRY_POINT`:
+**File index cache**: Check if `.claude/cache/project-file-index.txt` exists at the project root.
+- If it exists: use it as the primary discovery source. To locate files matching `ENTRY_POINT`, grep the cache: `grep -i "<name>" .claude/cache/project-file-index.txt`. Filter the results with additional patterns as needed. Read matched files directly by their full absolute paths from the cache output.
+- If missing: proceed with Grep and Glob below, and note inline: "Run /init-cortex to rebuild file index cache"
+
+Use Grep and Glob to find files related to `ENTRY_POINT` (used as fallback when cache is absent, or to confirm ambiguous cache results):
 - If `ENTRY_POINT` is an endpoint (e.g., `/api/orders`): Grep for the route string across all source files
 - If `ENTRY_POINT` is a component or class name: Grep for the name, then Glob for `**/<name>.*`
 - If `ENTRY_POINT` is a file path: verify it exists, then trace callers via Grep for the function/export name

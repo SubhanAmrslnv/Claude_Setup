@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# @version: 3.3.0
+# @version: 3.4.0
 # UserPromptSubmit — minimal latency mode.
 # No file discovery, no scoring, no aliases, no snippets.
-# Handles: --y flag, intent detection, project profile read, command hint.
+# Handles: --y flag, intent detection, project profile read, file index cache, command hint.
 
 source "${CORTEX_ROOT:-$(pwd)/.claude}/core/shared/bootstrap.sh" || exit 0
 
@@ -21,6 +21,15 @@ fi
 
 # Fast-path: no enrichment needed for standard prompts
 [[ $yes_mode -eq 0 ]] && exit 0
+
+# ── File index cache ──────────────────────────────────────────────────────────
+FILE_INDEX="$CORTEX_CACHE/project-file-index.txt"
+file_count=""
+if [[ -f "$FILE_INDEX" && -s "$FILE_INDEX" ]]; then
+  file_count=$(wc -l < "$FILE_INDEX" 2>/dev/null | tr -d ' ')
+else
+  echo "[CORTEX] File index missing — run /init-cortex to rebuild file index cache" >&2
+fi
 
 # ── Intent detection (lightweight) ───────────────────────────────────────────
 prompt_lower=$(echo "$prompt" | tr '[:upper:]' '[:lower:]')
@@ -46,8 +55,9 @@ fi
 ctx="[CORTEX]
 intent: ${intent}
 project: ${project_type}"
-[[ -n "$framework" ]] && ctx="${ctx}"$'\n'"framework: ${framework}"
-[[ -n "$arch" ]]      && ctx="${ctx}"$'\n'"arch: ${arch}"
+[[ -n "$framework" ]]  && ctx="${ctx}"$'\n'"framework: ${framework}"
+[[ -n "$arch" ]]       && ctx="${ctx}"$'\n'"arch: ${arch}"
+[[ -n "$file_count" ]] && ctx="${ctx}"$'\n'"files: ${file_count}"
 ctx="${ctx}"$'\n'"[/CORTEX]"
 
 enriched="${ctx}"$'\n\n'"${prompt}"$'\n\n'"[GLOBAL ANSWER POLICY]

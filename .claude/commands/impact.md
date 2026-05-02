@@ -62,6 +62,10 @@ Read each file to confirm classification when the path alone is ambiguous. Do no
 
 For each changed file, determine what depends on it. Use Grep to find references across the codebase.
 
+**File index cache**: Check if `.claude/cache/project-file-index.txt` exists at the project root.
+- If it exists: use it to scope all Grep searches. Read the cache to get the full list of project files, then run Grep only within those files instead of scanning the raw filesystem. This eliminates noise directories automatically since the cache already excludes `node_modules/`, `bin/`, `obj/`, `dist/`, `.git/`, and other generated paths.
+- If missing: proceed with unrestricted Grep below, and note inline: "Run /init-cortex to rebuild file index cache"
+
 Do NOT search inside: `node_modules/`, `bin/`, `obj/`, `dist/`, `.git/`, `*.lock`, `*.log`, `*.min.js`, `*.map`.
 
 ### By type

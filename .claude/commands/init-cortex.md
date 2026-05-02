@@ -272,7 +272,74 @@ After removal, re-list `$CORTEX_ROOT/core/scanners/` to confirm the final retain
 
 ---
 
-## STEP 7 — Validate scanner availability
+## STEP 7 — Build Project File Index Cache
+
+Build a project-wide file index at `$CORTEX_ROOT/cache/project-file-index.txt`. This cache is consumed by hooks and commands for fast file discovery without repeated filesystem scans.
+
+In `--dry-run` mode: compute the count but write nothing. Log `[WOULD WRITE] $CORTEX_ROOT/cache/project-file-index.txt (<N> files)` and skip 7b–7c.
+
+### 7a — Resolve project root
+
+```bash
+PROJECT_ROOT=$(dirname "$CORTEX_ROOT")
+INDEX_TEMP="$CORTEX_ROOT/cache/project-file-index.tmp"
+INDEX_FINAL="$CORTEX_ROOT/cache/project-file-index.txt"
+```
+
+### 7b — Scan all project files
+
+Run `find` from `$PROJECT_ROOT`, collecting all regular files while pruning noise and generated directories:
+
+```bash
+find "$PROJECT_ROOT" -type f \
+  -not -path "*/.git/*" \
+  -not -path "*/node_modules/*" \
+  -not -path "*/bin/*" \
+  -not -path "*/obj/*" \
+  -not -path "*/dist/*" \
+  -not -path "*/build/*" \
+  -not -path "*/.next/*" \
+  -not -path "*/coverage/*" \
+  -not -path "${CORTEX_ROOT}/cache/*" \
+  -not -path "${CORTEX_ROOT}/temp/*" \
+  2>/dev/null \
+| sort > "$INDEX_TEMP"
+```
+
+Each line in `$INDEX_TEMP` is a full absolute path to one project file.
+
+### 7c — Atomic write
+
+Rename the temp file to the final location:
+
+```bash
+mv "$INDEX_TEMP" "$INDEX_FINAL"
+```
+
+Write to `$INDEX_TEMP` first, then rename to `$INDEX_FINAL` atomically — this prevents hooks from reading a partial index if the scan is interrupted mid-run.
+
+If `mv` fails: delete `$INDEX_TEMP`, then record:
+```
+TYPE: WARNING
+TITLE: File index write failed
+DETAILS: $CORTEX_ROOT/cache/project-file-index.txt could not be written
+WHY: Atomic rename failed — partial writes were discarded
+FIX: Check disk space and permissions on $CORTEX_ROOT/cache/
+```
+
+### 7d — Report
+
+Count indexed files and record the result:
+
+```bash
+INDEX_COUNT=$(wc -l < "$INDEX_FINAL" 2>/dev/null | tr -d ' ')
+```
+
+Record as: `[FILE INDEX] Built: $INDEX_FINAL — $INDEX_COUNT files indexed`
+
+---
+
+## STEP 8 — Validate scanner availability
 
 Read `$CORTEX_ROOT/registry/scanners.json`.
 
@@ -320,6 +387,10 @@ Generated: <timestamp>
   Kept scanners:    <scanner1> <scanner2> ... (<N> total)
   Removed:          <scanner3> <scanner4> ... (<N> removed) | none
   Final scanners:   <list of all remaining scanner directory names>
+
+[FILE INDEX]
+  Path:   $CORTEX_ROOT/cache/project-file-index.txt
+  Files:  <N> indexed | SKIPPED (--dry-run) | FAILED
 
 [SCANNERS]
   <ext>/<scanner>    OK | INFO (pruned) | WARNING (missing)

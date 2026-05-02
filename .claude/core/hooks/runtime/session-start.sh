@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# @version: 1.4.0
+# @version: 1.5.0
 # SessionStart project profiler — detects project type, framework, arch, extracts deps,
 # entry points, folder structure; writes .claude/cache/project-profile.json.
 # Idempotent via fingerprint. Prunes scan cache using configurable TTL (default 30 days).
+# Uses project-file-index.txt cache for fast discovery when available.
 
 source "${CORTEX_ROOT:-$(pwd)/.claude}/core/shared/bootstrap.sh" || exit 0
 
 PROFILE="$CORTEX_CACHE/project-profile.json"
 SCAN_CACHE="$CORTEX_CACHE/scans"
+FILE_INDEX="$CORTEX_CACHE/project-file-index.txt"
+PROJECT_ROOT=$(dirname "$CORTEX_ROOT")
+
+_INDEX_AVAILABLE=0
+[[ -f "$FILE_INDEX" && -s "$FILE_INDEX" ]] && _INDEX_AVAILABLE=1
 
 mkdir -p "$SCAN_CACHE" 2>/dev/null
 
@@ -43,6 +49,20 @@ fi
 # ── Project type detection (priority: dotnet > rust > java > node > go > python) ──
 _detect_type() {
   local csprojs
+  if [[ $_INDEX_AVAILABLE -eq 1 ]]; then
+    csprojs=$(grep -cE '\.csproj$' "$FILE_INDEX" 2>/dev/null | tr -d '[:space:]')
+    [[ "${csprojs:-0}" -gt 0 ]]                                                                && { echo "dotnet"; return; }
+    grep -qxF "${PROJECT_ROOT}/Cargo.toml" "$FILE_INDEX" 2>/dev/null                          && { echo "rust";   return; }
+    { grep -qxF "${PROJECT_ROOT}/pom.xml" "$FILE_INDEX" 2>/dev/null || \
+      grep -qxF "${PROJECT_ROOT}/build.gradle" "$FILE_INDEX" 2>/dev/null || \
+      grep -qxF "${PROJECT_ROOT}/build.gradle.kts" "$FILE_INDEX" 2>/dev/null; }               && { echo "java";   return; }
+    grep -qxF "${PROJECT_ROOT}/package.json" "$FILE_INDEX" 2>/dev/null                        && { echo "node";   return; }
+    grep -qxF "${PROJECT_ROOT}/go.mod" "$FILE_INDEX" 2>/dev/null                              && { echo "go";     return; }
+    { grep -qxF "${PROJECT_ROOT}/requirements.txt" "$FILE_INDEX" 2>/dev/null || \
+      grep -qxF "${PROJECT_ROOT}/pyproject.toml" "$FILE_INDEX" 2>/dev/null || \
+      grep -qxF "${PROJECT_ROOT}/setup.py" "$FILE_INDEX" 2>/dev/null; }                       && { echo "python"; return; }
+    echo "unknown"; return
+  fi
   csprojs=$(find . -name "*.csproj" -not -path "*/obj/*" -not -path "*/bin/*" 2>/dev/null | wc -l)
   [[ $csprojs -gt 0 ]]                                                 && { echo "dotnet"; return; }
   [[ -f Cargo.toml ]]                                                  && { echo "rust";   return; }
@@ -96,24 +116,52 @@ case "$project_type" in
     main_val=$(jq -r '.main // empty' package.json 2>/dev/null)
     if [[ -n "$main_val" ]]; then
       entry_points=$(jq -n --arg m "$main_val" '[$m]')
+    elif [[ $_INDEX_AVAILABLE -eq 1 ]]; then
+      entry_points=$(grep -E '/index\.[^/]+$' "$FILE_INDEX" 2>/dev/null \
+                     | grep -v '/node_modules/' | head -5 | _to_arr)
     else
       entry_points=$(find . -maxdepth 2 -name "index.*" -not -path "*/node_modules/*" \
                      2>/dev/null | head -5 | _to_arr)
     fi ;;
   python)
-    entry_points=$(find . -maxdepth 3 \
-                   \( -name "main.py" -o -name "app.py" -o -name "manage.py" -o -name "run.py" \) \
-                   2>/dev/null | head -5 | _to_arr) ;;
+    if [[ $_INDEX_AVAILABLE -eq 1 ]]; then
+      entry_points=$(grep -E '/(main|app|manage|run)\.py$' "$FILE_INDEX" 2>/dev/null \
+                     | head -5 | _to_arr)
+    else
+      entry_points=$(find . -maxdepth 3 \
+                     \( -name "main.py" -o -name "app.py" -o -name "manage.py" -o -name "run.py" \) \
+                     2>/dev/null | head -5 | _to_arr)
+    fi ;;
   go)
-    entry_points=$(find . -name "main.go" -not -path "*/vendor/*" 2>/dev/null | head -5 | _to_arr) ;;
+    if [[ $_INDEX_AVAILABLE -eq 1 ]]; then
+      entry_points=$(grep -E '/main\.go$' "$FILE_INDEX" 2>/dev/null \
+                     | grep -v '/vendor/' | head -5 | _to_arr)
+    else
+      entry_points=$(find . -name "main.go" -not -path "*/vendor/*" 2>/dev/null | head -5 | _to_arr)
+    fi ;;
   rust)
-    entry_points=$(find . -name "main.rs" -not -path "*/target/*" 2>/dev/null | head -5 | _to_arr) ;;
+    if [[ $_INDEX_AVAILABLE -eq 1 ]]; then
+      entry_points=$(grep -E '/main\.rs$' "$FILE_INDEX" 2>/dev/null \
+                     | grep -v '/target/' | head -5 | _to_arr)
+    else
+      entry_points=$(find . -name "main.rs" -not -path "*/target/*" 2>/dev/null | head -5 | _to_arr)
+    fi ;;
   dotnet)
-    entry_points=$(find . -name "Program.cs" -not -path "*/obj/*" -not -path "*/bin/*" \
-                   2>/dev/null | head -5 | _to_arr) ;;
+    if [[ $_INDEX_AVAILABLE -eq 1 ]]; then
+      entry_points=$(grep -E '/Program\.cs$' "$FILE_INDEX" 2>/dev/null \
+                     | head -5 | _to_arr)
+    else
+      entry_points=$(find . -name "Program.cs" -not -path "*/obj/*" -not -path "*/bin/*" \
+                     2>/dev/null | head -5 | _to_arr)
+    fi ;;
   java)
-    entry_points=$(find . \( -name "Application.java" -o -name "Main.java" \) \
-                   2>/dev/null | head -5 | _to_arr) ;;
+    if [[ $_INDEX_AVAILABLE -eq 1 ]]; then
+      entry_points=$(grep -E '/(Application|Main)\.java$' "$FILE_INDEX" 2>/dev/null \
+                     | head -5 | _to_arr)
+    else
+      entry_points=$(find . \( -name "Application.java" -o -name "Main.java" \) \
+                     2>/dev/null | head -5 | _to_arr)
+    fi ;;
 esac
 
 # ── Folder structure (depth 2, skip noise) ────────────────────────────────────
