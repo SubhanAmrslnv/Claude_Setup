@@ -25,6 +25,43 @@ Stop.
 
 ---
 
+## STEP 0 — Remote SHA comparison (early-exit check)
+
+Resolve CORTEX_ROOT:
+```bash
+CORTEX_ROOT="${CORTEX_ROOT:-$(pwd)/.claude}"
+VERSION_FILE="$CORTEX_ROOT/state/cortex-version.json"
+```
+
+Fetch the latest commit SHA from the remote main branch (lightweight — no clone needed):
+```bash
+REMOTE_SHA=$(git ls-remote https://github.com/SubhanAmrslnv/Cortex.git refs/heads/main 2>/dev/null | cut -f1)
+```
+
+If this command fails or returns an empty string:
+- Print: `[WARN] Could not fetch remote SHA — skipping SHA comparison, proceeding with standard update flow.`
+- Set `REMOTE_SHA=""` and continue to STEP 1.
+
+If `REMOTE_SHA` is non-empty, read the stored SHA:
+```bash
+STORED_SHA=$(jq -r '.remoteCommit // empty' "$VERSION_FILE" 2>/dev/null)
+```
+
+If `STORED_SHA` is non-empty AND equals `REMOTE_SHA`:
+```
+[PASS]
+
+Already up to date — local installation matches remote main.
+Commit: <REMOTE_SHA>
+
+No files were modified.
+```
+Stop. Do NOT run /init-cortex (nothing changed).
+
+Otherwise continue to STEP 1. Save `REMOTE_SHA` and `STORED_SHA` as variables for use in STEP 5a and STEP 7.
+
+---
+
 ## STEP 1 — Verify .cortex/base/ state
 
 Check whether `.cortex/base/` exists AND whether it is a valid git repository.
@@ -230,6 +267,17 @@ git diff --stat HEAD origin/$DEFAULT_BRANCH -- .
 
 ## STEP 5 — Apply update
 
+### Pre-apply snapshot (rollback baseline)
+
+Before running `git reset --hard`, record the current HEAD so the update can be rolled back if it partially fails:
+```bash
+ROLLBACK_SHA=$(git -C .cortex/base/ rev-parse HEAD 2>/dev/null)
+```
+
+If `ROLLBACK_SHA` is empty (no commits yet — first-time clone path), skip rollback tracking.
+
+### Apply
+
 Inside `.cortex/base/`, run:
 ```
 git reset --hard origin/$DEFAULT_BRANCH
@@ -239,11 +287,20 @@ Do NOT touch `.cortex/local/` at any point.
 Do NOT overwrite `.claude/` or any other project files outside `.cortex/base/`.
 
 If `git reset --hard` exits non-zero:
+
+1. Attempt rollback immediately:
+   ```bash
+   git -C .cortex/base/ reset --hard "$ROLLBACK_SHA" 2>/dev/null
+   ```
+2. If rollback succeeds: report `[AUTO-ROLLBACK] Restored .cortex/base/ to $ROLLBACK_SHA`.
+3. If rollback also fails: report the rollback failure verbatim and instruct the user to run `rm -rf .cortex/base/` then re-run `/update-cortex`.
+
+Then classify the original failure:
 - Check for merge conflicts: `git status | grep "both modified"`
 - If conflicts found: present the conflicting files to the user. Ask them to resolve or re-clone. Never auto-resolve.
 - If no conflicts, suggest: `git checkout -f HEAD -- .` then retry the reset once. If it still fails, report verbatim git error and stop.
 
-### 5a — Post-reset integrity check
+### Post-reset integrity check
 
 Verify that the reset left `.cortex/base/` in a usable state. Check that these files exist and are valid JSON:
 - `.cortex/base/.cortex/registry/hooks.json`
@@ -262,6 +319,42 @@ FIX: run `rm -rf .cortex/base/` then re-run /update-cortex to clone fresh
 Stop.
 
 Set `BASE_STATUS = UPDATED`.
+
+---
+
+## STEP 5a — Persist remote version
+
+Resolve the new commit SHA. Prefer `REMOTE_SHA` fetched in STEP 0. If it is empty (fetch failed earlier), read it from the local clone:
+```bash
+NEW_COMMIT=$([ -n "$REMOTE_SHA" ] && echo "$REMOTE_SHA" || git -C .cortex/base/ rev-parse HEAD 2>/dev/null)
+```
+
+Write `.claude/state/cortex-version.json` (CORTEX_ROOT is `$(pwd)/.claude` or `$CORTEX_ROOT`):
+```bash
+mkdir -p "$CORTEX_ROOT/state"
+cat > "$CORTEX_ROOT/state/cortex-version.json" <<EOF
+{
+  "remoteCommit": "$NEW_COMMIT",
+  "updatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "sourceBranch": "$DEFAULT_BRANCH"
+}
+EOF
+```
+
+Safety rules for this write:
+- NEVER overwrite any file under `.claude/local/`.
+- NEVER overwrite any other file under `.claude/state/` (only `cortex-version.json` is touched).
+- If `mkdir -p` or the write fails, print a warning and continue — do NOT stop. The update itself already succeeded.
+
+```
+[WARN] (only if write failed)
+
+TYPE: WARNING
+TITLE: Version file write failed
+DETAILS: .claude/state/cortex-version.json could not be written
+WHY: disk permissions or space issue
+FIX: manually create the file or check permissions on .claude/state/
+```
 
 ---
 
@@ -304,3 +397,18 @@ Generated: <YYYY-MM-DD HH:MM:SS UTC>
 ```
 
 Follow with the full /init-cortex report output (omit if NO_CHANGE).
+
+Then print the final summary block (always, regardless of NO_CHANGE):
+
+```
+Cortex Update Complete
+Previous Commit: <STORED_SHA | "none">
+New Commit:      <NEW_COMMIT | "unchanged">
+Files Updated:   <N from diff stat | 0 if NO_CHANGE>
+Init Cortex:     Success | Skipped | Failed
+```
+
+- `Previous Commit`: the `remoteCommit` value read from `cortex-version.json` before this run (or `"none"` if the file did not exist).
+- `New Commit`: the commit SHA written to `cortex-version.json` in STEP 5a (or `"unchanged"` if BASE_STATUS is NO_CHANGE).
+- `Files Updated`: the count of files listed in the diff stat (`0` if NO_CHANGE or CLONED with no prior base).
+- `Init Cortex`: `Success` if /init-cortex ran and exited 0, `Failed` if it exited non-zero, `Skipped` if BASE_STATUS was NO_CHANGE.

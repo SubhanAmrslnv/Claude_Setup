@@ -32,9 +32,13 @@ Never overwrite a file blindly. Never duplicate content that already exists in a
 
 Perform a real analysis of the project to inform documentation content. Use the following checks:
 
+**File index cache**: Before running any Glob or Grep, check if `.claude/cache/project-file-index.txt` exists at the project root.
+- If it exists: use it as the primary file discovery source for all detection checks below. Instead of running Glob patterns, grep the cache file directly. Examples: to find `.csproj` files use `grep -E '\.csproj$' .claude/cache/project-file-index.txt`; to find controller files use `grep -iE '/(controller|handler|router|routes)[^/]*\.(cs|ts|js|py|java|go)$' .claude/cache/project-file-index.txt`. The cache already excludes noise directories (node_modules, bin, obj, dist, .git), so no additional filtering is required.
+- If missing: proceed with Glob and Grep as described below, and note inline: "Run /init-cortex to rebuild file index cache"
+
 ### Detect project type
 
-Use Glob to check for:
+Use Glob (or cache grep if available) to check for:
 - `*.sln` or `*.csproj` → .NET project
 - `package.json` → Node / JavaScript / TypeScript project
 - `requirements.txt` or `pyproject.toml` → Python project
