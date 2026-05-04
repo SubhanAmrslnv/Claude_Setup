@@ -351,6 +351,41 @@ If the scanner file is missing but its parent directory still exists, record as 
 
 ---
 
+## STEP 9 — Remote version tracking
+
+This step is **best-effort**. A failure here does NOT change the overall init status or stop execution.
+
+Attempt to fetch the latest commit SHA from the remote main branch (lightweight — no clone needed):
+```bash
+REMOTE_SHA=$(git ls-remote https://github.com/SubhanAmrslnv/Cortex.git refs/heads/main 2>/dev/null | cut -f1)
+```
+
+If `REMOTE_SHA` is empty or the command exits non-zero:
+- Record: `[REMOTE VERSION] Fetch failed — cortex-version.json not updated`
+- Continue.
+
+If `REMOTE_SHA` is non-empty:
+- In `--dry-run` mode: record `[WOULD WRITE] $CORTEX_ROOT/state/cortex-version.json` and skip the write.
+- Otherwise write (create if absent):
+  ```bash
+  mkdir -p "$CORTEX_ROOT/state"
+  cat > "$CORTEX_ROOT/state/cortex-version.json" <<EOF
+  {
+    "remoteCommit": "$REMOTE_SHA",
+    "updatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+    "sourceBranch": "main"
+  }
+  EOF
+  ```
+- Record: `[REMOTE VERSION] cortex-version.json updated — remote commit: ${REMOTE_SHA:0:7}`
+
+Safety rules:
+- NEVER touch any file under `$CORTEX_ROOT/local/`.
+- NEVER touch any other file under `$CORTEX_ROOT/state/` — only `cortex-version.json` is written.
+- If `mkdir -p` or the write fails, record a WARNING and continue. Never stop.
+
+---
+
 ## OUTPUT
 
 Print the overall status (`[PASS]`, `[WARN]`, or `[FAIL]`) based on highest severity found.
@@ -391,6 +426,10 @@ Generated: <timestamp>
 [FILE INDEX]
   Path:   $CORTEX_ROOT/cache/project-file-index.txt
   Files:  <N> indexed | SKIPPED (--dry-run) | FAILED
+
+[REMOTE VERSION]
+  cortex-version.json:  UPDATED | SKIPPED (--dry-run) | FETCH FAILED
+  Remote commit:        <short SHA> | N/A
 
 [SCANNERS]
   <ext>/<scanner>    OK | INFO (pruned) | WARNING (missing)
