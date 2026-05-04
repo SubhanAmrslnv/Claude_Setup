@@ -322,6 +322,58 @@ Set `BASE_STATUS = UPDATED`.
 
 ---
 
+## STEP 5b — Scanner update filter (existing-only)
+
+After the reset, prune any scanner directories that are new in the remote but do not already exist in the local installation. This prevents `/update-cortex` from silently introducing scanners for languages the project has never used.
+
+### 5b-i — Snapshot local scanner set
+
+Read the set of scanner directories currently installed under `$CORTEX_ROOT/core/scanners/`:
+```bash
+LOCAL_SCANNERS=$(ls -d "$CORTEX_ROOT/core/scanners/"*/ 2>/dev/null | xargs -I{} basename {} | sort)
+```
+
+If `$CORTEX_ROOT/core/scanners/` does not exist or is empty, skip this step entirely (nothing to protect).
+
+### 5b-ii — Identify new remote scanners
+
+List scanner directories present in the fetched remote base:
+```bash
+REMOTE_SCANNER_ROOT=".cortex/base/.claude/core/scanners"   # adjust if the remote layout uses a different path
+REMOTE_SCANNERS=$(ls -d "$REMOTE_SCANNER_ROOT/"*/ 2>/dev/null | xargs -I{} basename {} | sort)
+```
+
+Compute the set difference — directories in remote but NOT in local:
+```bash
+NEW_SCANNERS=$(comm -13 <(echo "$LOCAL_SCANNERS") <(echo "$REMOTE_SCANNERS"))
+```
+
+### 5b-iii — Remove new-remote-only scanners from the base snapshot
+
+For each directory name in `NEW_SCANNERS`:
+
+1. **Path traversal safety check** (same rules as `/init-cortex` STEP 6b):
+   - Resolve absolute path: `CANDIDATE=$(cd "$REMOTE_SCANNER_ROOT/$dir" 2>/dev/null && pwd)`
+   - Verify it starts with the resolved `$REMOTE_SCANNER_ROOT` absolute path
+   - Verify basename matches `^[a-zA-Z0-9_-]+$`
+   - Verify it is a real directory, not a symlink: `[ -d "$CANDIDATE" ] && [ ! -L "$CANDIDATE" ]`
+   - If any check fails: skip silently (do not delete, do not error)
+
+2. Run: `rm -rf "$CANDIDATE"`
+
+3. Record: `[SCANNER FILTER] Skipped new remote scanner: <dir> (not in local installation)`
+
+If `NEW_SCANNERS` is empty, record: `[SCANNER FILTER] No new remote scanners — nothing filtered`
+
+### 5b-iv — Report
+
+Print a one-line summary at the end of this step:
+```
+[SCANNER FILTER] Local: <N> scanners | Remote new (skipped): <M> | Will update: <local set>
+```
+
+---
+
 ## STEP 5a — Persist remote version
 
 Resolve the new commit SHA. Prefer `REMOTE_SHA` fetched in STEP 0. If it is empty (fetch failed earlier), read it from the local clone:
@@ -389,6 +441,11 @@ Generated: <YYYY-MM-DD HH:MM:SS UTC>
 
 [LOCAL OVERRIDES]
   .cortex/local/ preserved — untouched
+
+[SCANNER FILTER]
+  Local scanners:   <list of existing scanner dirs>
+  Remote new (skipped): <list | none>
+  Updated:          <list of scanners that received changes>
 
 [HOOKS]
   <hook-name>   DEPLOYED | UPDATED | SKIPPED   <version>
