@@ -1,0 +1,18 @@
+{
+  "FileChanged": [
+    "hooks/runtime/post-format.sh",
+    "hooks/runtime/post-scan.sh",
+    "memory/plans-watcher.sh"
+  ],
+  "BuildFailed": [
+    "debug/build-watcher.sh"
+  ],
+  "TestFailed": [
+    "debug/test-replay.sh"
+  ],
+  "DebugStarted": [
+    "debug/runtime-monitor.sh"
+  ],
+  "SessionStopped": [],
+  "TaskCompleted": []
+}

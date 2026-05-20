@@ -1,21 +1,15 @@
 {
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"${CORTEX_ROOT:-$(pwd)/.claude}/core/statusline/render.sh\""
+  },
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CORTEX_ROOT:-$(pwd)/.claude}/core/hooks/runtime/session-start.sh\""
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CORTEX_ROOT:-$(pwd)/.claude}/core/hooks/runtime/prompt-optimizer.sh\""
+            "command": "bash \"${CORTEX_ROOT:-$(pwd)/.claude}/core/hooks/runtime/prompt-router.sh\""
           }
         ]
       }
@@ -37,16 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CORTEX_ROOT:-$(pwd)/.claude}/core/hooks/runtime/post-format.sh\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CORTEX_ROOT:-$(pwd)/.claude}/core/hooks/runtime/post-scan.sh\""
+            "command": "bash \"${CORTEX_ROOT:-$(pwd)/.claude}/core/events/bus.sh\" publish FileChanged"
           }
         ]
       }

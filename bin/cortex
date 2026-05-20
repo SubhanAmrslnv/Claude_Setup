@@ -1,0 +1,159 @@
+#!/usr/bin/env node
+// Cortex CLI — `npx @cortex/cli` entrypoint.
+//
+//   cortex init           Install + validate .claude/ into the current project
+//   cortex update         Re-fetch the skeleton (idempotent upgrade)
+//   cortex doctor         Local sanity check (no network)
+//   cortex --version      Print package version
+//
+// The npx flow is now the canonical bootstrap; the in-Claude /init-cortex and
+// /update-cortex slash commands have been removed.
+
+'use strict';
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const pkg = require(path.join(__dirname, '..', 'package.json'));
+const REPO_RAW =
+  process.env.CORTEX_REPO_RAW ||
+  `https://raw.githubusercontent.com/${process.env.CORTEX_REPO_ORG || 'SubhanAmrslnv'}/${process.env.CORTEX_REPO_NAME || 'Cortex'}/${process.env.CORTEX_REF || 'main'}`;
+
+const ROOT = path.join(process.cwd(), '.claude');
+
+function fail(msg) {
+  console.error(`cortex: ${msg}`);
+  process.exit(1);
+}
+
+function readJson(p) {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
+}
+
+function runInstaller() {
+  if (!spawnSync('bash', ['--version'], { stdio: 'ignore' }).status === 0) {
+    fail('bash is required (install Git for Windows or WSL).');
+  }
+  if (!spawnSync('jq', ['--version'], { stdio: 'ignore' }).status === 0) {
+    fail('jq is required. macOS: `brew install jq`. Linux: `sudo apt install jq`. Windows: `scoop install jq`.');
+  }
+
+  const tmp = path.join(os.tmpdir(), `cortex-install-${Date.now()}.sh`);
+  const dl = spawnSync('curl', ['-fsSL', `${REPO_RAW}/scripts/lib/install-core.sh`, '-o', tmp], {
+    stdio: 'inherit',
+  });
+  if (dl.status !== 0) fail('failed to fetch installer core.');
+
+  const env = { ...process.env, CORTEX_REPO_RAW: REPO_RAW, CORTEX_TARGET: process.cwd() };
+  const r = spawnSync('bash', [tmp], { stdio: 'inherit', env });
+  fs.rmSync(tmp, { force: true });
+  if (r.status !== 0) fail('installer failed.');
+}
+
+// What `/init-cortex` used to do: validate registries against the filesystem,
+// confirm settings.json wires real scripts, and prune scanner directories that
+// don't match any detected language.
+function validate({ fixScanners = true } = {}) {
+  if (!fs.existsSync(ROOT)) fail('.claude not found. Run `cortex init` first.');
+
+  const issues = [];
+  const ok = (msg) => console.log(`  \x1b[32m✓\x1b[0m ${msg}`);
+  const bad = (msg) => { issues.push(msg); console.log(`  \x1b[31m✗\x1b[0m ${msg}`); };
+
+  // 1) Hooks registry vs filesystem.
+  const hooksReg = readJson(path.join(ROOT, 'registry/hooks.json'));
+  if (!hooksReg) bad('registry/hooks.json missing or invalid');
+  else {
+    let deployed = 0, total = 0;
+    for (const [name, entry] of Object.entries(hooksReg)) {
+      total++;
+      const src = path.join(ROOT, entry.source);
+      if (fs.existsSync(src)) deployed++;
+      else bad(`hook missing: ${name} → ${entry.source}`);
+    }
+    if (deployed === total) ok(`hooks ${deployed}/${total} deployed`);
+  }
+
+  // 2) Commands registry vs filesystem.
+  const cmdReg = readJson(path.join(ROOT, 'registry/commands.json'));
+  if (!cmdReg || !Array.isArray(cmdReg.commands)) bad('registry/commands.json missing or invalid');
+  else {
+    let deployed = 0;
+    for (const name of cmdReg.commands) {
+      const md = path.join(ROOT, 'commands', `${name}.md`);
+      if (fs.existsSync(md)) deployed++;
+      else bad(`command missing: /${name} → commands/${name}.md`);
+    }
+    if (deployed === cmdReg.commands.length) ok(`commands ${deployed}/${cmdReg.commands.length} deployed`);
+  }
+
+  // 3) settings.json hook wirings.
+  const settings = readJson(path.join(ROOT, 'settings.json'));
+  if (!settings || !settings.hooks) bad('settings.json missing or missing hooks block');
+  else ok('settings.json wirings present');
+
+  // 4) Scanner pruning.
+  const scannersJson = readJson(path.join(ROOT, 'registry/scanners.json'));
+  if (scannersJson) {
+    const keep = new Set(['generic']);
+    for (const arr of Object.values(scannersJson)) {
+      for (const s of arr || []) keep.add(s.split('/')[0]);
+    }
+    const scanDir = path.join(ROOT, 'core/scanners');
+    if (fs.existsSync(scanDir)) {
+      const have = fs.readdirSync(scanDir).filter((d) => fs.statSync(path.join(scanDir, d)).isDirectory());
+      const stale = have.filter((d) => !keep.has(d));
+      if (stale.length === 0) ok(`scanners pruned (${have.length} languages)`);
+      else if (fixScanners) {
+        for (const d of stale) fs.rmSync(path.join(scanDir, d), { recursive: true, force: true });
+        ok(`pruned stale scanner dirs: ${stale.join(', ')}`);
+      } else {
+        bad(`stale scanner dirs: ${stale.join(', ')}`);
+      }
+    }
+  }
+
+  // 5) Local-only directories exist.
+  for (const d of ['cache', 'logs', 'temp/events', 'state', 'project/memory/plans']) {
+    fs.mkdirSync(path.join(ROOT, d), { recursive: true });
+  }
+  ok('runtime directories ready');
+
+  if (issues.length) {
+    console.log(`\ncortex: ${issues.length} issue(s) — re-run \`cortex update\` to repair.`);
+    process.exit(1);
+  }
+  console.log('\ncortex: OK');
+}
+
+const [cmd] = process.argv.slice(2);
+switch (cmd) {
+  case 'init':
+    runInstaller();
+    validate({ fixScanners: true });
+    break;
+  case 'update':
+    runInstaller();
+    validate({ fixScanners: true });
+    break;
+  case 'doctor':
+    validate({ fixScanners: false });
+    break;
+  case '--version':
+  case '-v':
+    console.log(pkg.version);
+    break;
+  default:
+    console.log(
+`cortex ${pkg.version}
+
+Usage:
+  npx @cortex/cli init      Install + validate .claude/ in the current project
+  npx @cortex/cli update    Re-fetch and re-validate the skeleton
+  npx @cortex/cli doctor    Local sanity check (no network)
+  npx @cortex/cli --version
+
+Cortex is strictly project-local. There is no global install and no in-Claude
+init/update command — npx is the canonical bootstrap.`);
+}

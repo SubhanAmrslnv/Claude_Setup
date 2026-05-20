@@ -1,6 +1,6 @@
 {
   "bootstrap.sh": {
-    "version": "1.0.0",
+    "version": "2.0.0",
     "source": "core/shared/bootstrap.sh"
   },
   "pre-guard.sh": {
@@ -15,13 +15,9 @@
     "version": "1.3.0",
     "source": "core/hooks/guards/permission-denied.sh"
   },
-  "session-start.sh": {
-    "version": "1.5.0",
-    "source": "core/hooks/runtime/session-start.sh"
-  },
-  "prompt-optimizer.sh": {
-    "version": "3.4.0",
-    "source": "core/hooks/runtime/prompt-optimizer.sh"
+  "prompt-router.sh": {
+    "version": "1.0.0",
+    "source": "core/hooks/runtime/prompt-router.sh"
   },
   "post-format.sh": {
     "version": "2.5.0",
@@ -38,5 +34,81 @@
   "stop-build.sh": {
     "version": "1.5.0",
     "source": "core/hooks/runtime/stop-build.sh"
+  },
+  "events/bus.sh": {
+    "version": "1.0.0",
+    "source": "core/events/bus.sh"
+  },
+  "events/dispatcher.sh": {
+    "version": "1.0.0",
+    "source": "core/events/dispatcher.sh"
+  },
+  "planner/planner-engine.sh": {
+    "version": "1.0.0",
+    "source": "core/planner/planner-engine.sh"
+  },
+  "planner/task-graph.sh": {
+    "version": "1.0.0",
+    "source": "core/planner/task-graph.sh"
+  },
+  "planner/worker-pool.sh": {
+    "version": "1.0.0",
+    "source": "core/planner/worker-pool.sh"
+  },
+  "planner/merge-engine.sh": {
+    "version": "1.0.0",
+    "source": "core/planner/merge-engine.sh"
+  },
+  "router/model-router.sh": {
+    "version": "1.0.0",
+    "source": "core/router/model-router.sh"
+  },
+  "memory/index.sh": {
+    "version": "1.0.0",
+    "source": "core/memory/index.sh"
+  },
+  "memory/retrieve.sh": {
+    "version": "1.0.0",
+    "source": "core/memory/retrieve.sh"
+  },
+  "memory/plans.sh": {
+    "version": "1.0.0",
+    "source": "core/memory/plans.sh"
+  },
+  "memory/plans-watcher.sh": {
+    "version": "1.0.0",
+    "source": "core/memory/plans-watcher.sh"
+  },
+  "debug/runtime-monitor.sh": {
+    "version": "1.0.0",
+    "source": "core/debug/runtime-monitor.sh"
+  },
+  "debug/process-inspector.sh": {
+    "version": "1.0.0",
+    "source": "core/debug/process-inspector.sh"
+  },
+  "debug/log-stream.sh": {
+    "version": "1.0.0",
+    "source": "core/debug/log-stream.sh"
+  },
+  "debug/build-watcher.sh": {
+    "version": "1.0.0",
+    "source": "core/debug/build-watcher.sh"
+  },
+  "debug/test-replay.sh": {
+    "version": "1.0.0",
+    "source": "core/debug/test-replay.sh"
+  },
+  "debug/network-trace.sh": {
+    "version": "1.0.0",
+    "source": "core/debug/network-trace.sh"
+  },
+  "debug/browser-trace.sh": {
+    "version": "1.0.0",
+    "source": "core/debug/browser-trace.sh"
+  },
+  "statusline/render.sh": {
+    "version": "1.0.0",
+    "source": "core/statusline/render.sh"
   }
 }

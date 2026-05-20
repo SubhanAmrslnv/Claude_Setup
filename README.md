@@ -1,535 +1,216 @@
-# Cortex — Claude Code Global Configuration
+# Cortex
 
-A modular, registry-driven DevOps framework for [Claude Code](https://claude.ai/code).
-Covers intelligent prompt optimization, session profiling, risk-scored security guards, permission recovery, auto-formatting, code intelligence, audit logging, and a suite of analysis commands for hotspot detection, PR validation, pattern consistency, code optimization, overengineering detection, and code evolution tracking.
+An ultra-fast, event-driven, project-local AI runtime framework for [Claude Code](https://claude.ai/code).
+
+Cortex is hook-driven, registry-extensible, and strictly local: it lives entirely under each project's `.claude/` directory — no global install, no startup profiling, no automatic prompt injection. Heavy work runs on demand, in parallel.
 
 ---
 
-## Prerequisites
+## Installation
 
-| Tool | Required | Purpose |
-|---|---|---|
-| `jq` | **Yes** | JSON parsing in every hook — without it all hooks silently no-op |
-| `bash` 4.0+ | Yes | All hook scripts |
-| `git` | Yes | Branch detection, commit guard |
-| [Claude Code](https://claude.ai/code) | Yes | Hook and command runtime |
-
-**Install `jq`:**
+### One-liner (curl)
 ```bash
-# macOS
-brew install jq
-
-# Ubuntu/Debian
-sudo apt install jq
-
-# Windows — Scoop (recommended)
-scoop install jq
-
-# Windows — winget
-winget install jqlang.jq
+curl -fsSL https://raw.githubusercontent.com/SubhanAmrslnv/Cortex/main/scripts/install.sh | bash
 ```
 
-Verify: `jq --version`
+### Windows (PowerShell)
+```powershell
+iwr -useb https://raw.githubusercontent.com/SubhanAmrslnv/Cortex/main/scripts/install.ps1 | iex
+```
+
+### npm / npx
+```bash
+npx @cortex/cli init
+```
+
+All three paths run the same installer core. They detect the project's language(s), fetch only the matching scanners + `generic`, and write a complete `.claude/` skeleton into the current directory.
+
+**Prerequisites:** `bash 4+`, `jq`, `git`, Node 18+ (npm path only).
 
 ---
 
-## Repository Layout
+## Architecture
 
 ```
-.claude/                              ← framework root (adapter + all logic lives here)
-  settings.json                       ← adapter: wires hooks to Claude Code via ${CORTEX_ROOT:-$(pwd)/.claude}
-  settings.local.json                 ← local permission overrides (not committed)
-  keybindings.json                    ← key binding customizations
-  commands/                           ← full command implementations (commit.md, debug.md, …)
+.claude/
+  settings.json                       hook wirings — minimal, event-driven
+  commands/                           init-cortex, update-cortex, debug, commit
   core/
+    shared/bootstrap.sh               CORTEX_ROOT resolution, publish_event()
     hooks/
-      guards/
-        pre-guard.sh                  ← PreToolUse risk-scoring engine (v2.3.0)
-        permission-request.sh         ← PermissionRequest enricher (v1.1.1)
-        permission-denied.sh          ← PermissionDenied safe-recovery engine (v1.1.1)
-      runtime/
-        post-format.sh                ← registry-driven formatter dispatcher (v2.4.0)
-        post-scan.sh                  ← registry-driven security scanner dispatcher (v2.5.0)
-        post-audit-log.sh             ← audit logger with rotation + flock (v1.2.0)
-        post-code-intel.sh            ← code intelligence analyzer (v1.2.0)
-        post-error-analyzer.sh        ← PostToolUseFailure error classifier (v1.1.0)
-        notification.sh               ← Notification aggregator (v1.0.1)
-        task-tracker.sh               ← TaskCreated/TaskCompleted persistence (v1.0.2)
-        stop-build.sh                 ← build failure reporter with retry (v1.4.0)
-        session-start.sh              ← SessionStart project profiler (v1.2.0)
-        prompt-optimizer.sh           ← UserPromptSubmit structured prompt engine (v1.6.0)
-    runtime/
-      command-runner.sh               ← registry-driven command validator/dispatcher (v1.2.0)
-    scanners/
-      dotnet/security-scan.sh         ← unsafe .NET API detection
-      dotnet/format.sh                ← dotnet format wrapper
-      node/react-security-scan.sh     ← XSS pattern detection for JS/TS/JSX/TSX/Vue/Svelte
-      node/format.sh                  ← Prettier + ESLint wrapper
-      generic/secret-scan.sh          ← hardcoded secret detection (all file types)
-      (+ 20 more language scanners)
-  registry/
-    hooks.json                        ← hook names, versions, source paths
-    commands.json                     ← discoverable command list
-    scanners.json                     ← extension→scanner mapping (flat format)
-  config/
-    cortex.config.json                ← framework configuration (v3.1.0)
-  cache/
-    project-profile.json              ← generated at session start; consumed by prompt optimizer
-    scans/                            ← hash-based scan cache; entries pruned after 7 days
-  state/
-    snapshot.json                     ← generated by /regression --save; regression baseline
-    index.json                        ← snapshot history index
-  test/
-    run.sh                            ← smoke test runner (bash .claude/test/run.sh)
-    fixtures/                         ← JSON payloads for pre-guard, post-error-analyzer, post-scan
-  base/                               ← remote Cortex content (updated by /update-cortex)
-  local/                              ← project-local overrides (never overwritten)
-CLAUDE.md
-README.md
-INSTALL.md
+      guards/{pre-guard,permission-request,permission-denied}.sh
+      runtime/{prompt-router,post-format,post-scan,post-error-analyzer,stop-build}.sh
+    events/{bus,dispatcher,subscriptions.json}     publish/subscribe over file queue
+    planner/{planner-engine,task-graph,worker-pool,merge-engine}.sh   parallel DAGs
+    router/model-router.sh            advisory haiku/sonnet/opus selection
+    memory/{index,retrieve}.sh        lazy, grep-based retrieval (no embeddings)
+    debug/{runtime-monitor,process-inspector,log-stream,build-watcher,
+           test-replay,network-trace,browser-trace}.sh                runtime probes
+    scanners/<language>/              language-aware, installed selectively
+  project/memory/                     session, architecture, debug, workflow
+  registry/{hooks,commands,scanners}.json
+  config/cortex.config.json
+  cache/   logs/   state/   temp/events/
 ```
 
----
-
-## Global vs. Per-Project Activation
-
-Installing Cortex globally (`~/.claude`) makes the framework available machine-wide, but **does not automatically activate it in any project.**
-
-Each project needs a `.claude/` folder to wire hooks and commands into Claude Code. Without it, nothing loads.
-
-**To activate Cortex in a project:**
-1. Install `.claude` to `~/.claude`
-2. Copy `.claude/` into the project root
-3. Run `/init-cortex`
+**Strictly project-local.** Bootstrap resolves `CORTEX_ROOT` to `$(pwd)/.claude` only — no `$HOME` fallback.
 
 ---
 
-## CORTEX_ROOT Dynamic Resolution
+## Status Line
 
-All hooks and `settings.json` resolve the framework path dynamically. No file depends on a hardcoded path. Resolution order:
-
-| Priority | Source | Use case |
-|---|---|---|
-| 1 | `$CORTEX_ROOT` env var | CI/CD, Docker, custom install paths |
-| 2 | `$(pwd)/.claude` | Project-local install |
-| 3 | `$HOME/.claude` | Global install (default) |
-
-Every hook resolves CORTEX_ROOT inline — no external `.env` file required. This makes Cortex portable across machines, containers, and CI environments without any configuration.
+A multi-line project dashboard renders under the chatbox every turn (`core/statusline/render.sh`). Shows model + elapsed time, DDD domains, swarm agents, hook count, CVEs, memory size, context %, ADRs, AgentDB vectors, MCP server health, and the current permission mode. Safe-fail: never crashes Claude Code's render loop.
 
 ---
 
 ## Hooks
 
-All hooks run from the path resolved by CORTEX_ROOT. Hook paths in `settings.json` follow `${CORTEX_ROOT:-$(pwd)/.claude}/core/hooks/<subdir>/<filename>`.
+| Event                          | Hook                                          |
+|--------------------------------|-----------------------------------------------|
+| `statusLine`                   | `core/statusline/render.sh` — project dashboard rendered under the chatbox |
+| `PreToolUse` (Bash)            | `guards/pre-guard.sh` — 6-category risk score |
+| `PermissionRequest`            | `guards/permission-request.sh`                |
+| `PermissionDenied`             | `guards/permission-denied.sh`                 |
+| `UserPromptSubmit`             | `runtime/prompt-router.sh` — intent only      |
+| `PostToolUse` (Write\|Edit)    | `events/bus.sh publish FileChanged`           |
+| `PostToolUseFailure`           | `runtime/post-error-analyzer.sh`              |
+| `Stop`                         | `runtime/stop-build.sh`                       |
 
-| Event | Hook | What it does |
-|---|---|---|
-| `PreToolUse (Bash)` | `guards/pre-guard.sh` (v2.3.0) | Risk-scoring engine — scores command across 6 categories, warns or blocks; thresholds configurable |
-| `PermissionRequest` | `guards/permission-request.sh` (v1.1.1) | Enriches approval prompts with intent, risks, and safer alternatives |
-| `PermissionDenied` | `guards/permission-denied.sh` (v1.1.1) | Generates a safe alternative command and decides whether retry is possible |
-| `SessionStart` | `runtime/session-start.sh` (v1.2.0) | Detects project type (6 languages), extracts metadata, writes profile; prunes stale scan cache |
-| `UserPromptSubmit` | `runtime/prompt-optimizer.sh` (v1.6.0) | Detects intent, finds relevant files, extracts snippets, outputs structured prompt; supports `--y` flag |
-| `PostToolUse (Write\|Edit)` | `runtime/post-format.sh` (v2.4.0) | Registry-driven: dispatches to formatters by file extension |
-| `PostToolUse (Write\|Edit)` | `runtime/post-scan.sh` (v2.5.0) | Registry-driven: dispatches to security scanners; concurrency-limited, output-isolated, hash-cached |
-| `PostToolUse (Write\|Edit)` | `runtime/post-code-intel.sh` (v1.2.0) | Analyzes modified files for complexity, duplication, naming, and structure issues |
-| `PostToolUse (Write\|Edit\|Bash)` | `runtime/post-audit-log.sh` (v1.2.0) | Appends every tool use to `~/.claude/audit.log`; rotates at 5MB; flock concurrency-safe |
-| `PostToolUseFailure` | `runtime/post-error-analyzer.sh` (v1.1.0) | Single-pass classifier: sets type + root cause + suggestion in one scan of stderr |
-| `Notification` | `runtime/notification.sh` (v1.0.1) | Aggregates hook signals; emits only medium/high severity actionable notifications |
-| `TaskCreated` / `TaskCompleted` | `runtime/task-tracker.sh` (v1.0.2) | Persists task lifecycle events to `.claude/cache/tasks.json` |
-| `Stop` | `runtime/stop-build.sh` (v1.4.0) | Skips if project already running; retries build 3×; prints errors on failure — does NOT auto-fix |
+**There is no `SessionStart` hook.** Cortex does not profile the project at startup. The previous prompt-optimizer is gone — `prompt-router.sh` only labels the intent and passes the prompt through.
 
 ---
 
-## Hook Details
+## Event Bus
 
-### Risk-Scored Security Guard (`pre-guard.sh` v2.3.0)
+The `FileChanged` hook does **not** run formatters and scanners synchronously. It publishes one event to `.claude/temp/events/` and exits. `dispatcher.sh` fans subscribers (`post-format.sh`, `post-scan.sh`) out in parallel, capped by `eventBus.maxJobs` in config.
 
-Replaces flat pattern-blocking with a numeric risk engine. Accumulates a score across 6 categories:
+Add a new subscription by editing `.claude/core/events/subscriptions.json`:
+```json
+{ "FileChanged": ["hooks/runtime/post-format.sh", "hooks/runtime/post-scan.sh"] }
+```
 
-| Category | Examples | Points |
-|---|---|---|
-| Destructive | `rm -rf`, `DROP TABLE`, `git reset --hard`, `git clean -f` | +50 each |
-| Privileged | `sudo`, write to `/etc /usr /bin /sys` | +30 each |
-| Dangerous flags | `--force`, `--no-verify` | +20 each |
-| Security threats | curl\|sh, base64 exec, reverse shell, exploit tools | +40 each |
-| Sensitive files | `.env .pem .key .pfx` | +25 |
-| Protected branch | `main / master / develop` (git commands only) | +20 |
-
-**Thresholds:** `risk < warn` → allow silently · `warn–(block-1)` → allow with JSON warning · `≥ block` → block with reason + suggestion.
-
-Defaults: `warn=30 / block=70`. Override per-project via `cortex.config.json → riskThresholds`.
+Defined events: `FileChanged`, `BuildFailed`, `TestFailed`, `DebugStarted`, `SessionStopped`, `TaskCompleted`.
 
 ---
 
-### Permission System (`permission-request.sh` + `permission-denied.sh`)
+## Planner
 
-**PermissionRequest** — fires before the user sees an approval dialog. Outputs structured JSON:
+`planner-engine.sh build <intent>` emits a JSON DAG. `worker-pool.sh run <dag> <out-dir>` executes the frontier in parallel (cap: `planner.maxJobs`), retries failed tasks once, and writes one result file per task. `merge-engine.sh <out-dir>` produces a single bundle:
+```json
+{ "status": "OK|PARTIAL|FAIL", "completed": [...], "failed": [...], "results": { ... } }
+```
+
+The `/debug` flow uses `planner-engine.sh plan-and-run debug` to fan five runtime probes out at once.
+
+---
+
+## Memory
+
+`core/memory/retrieve.sh <intent> <query>` scores files against the query (path / basename keyword hits, intent-layer match, git-recency boost) and returns at most 5 paths with a one-line structural summary each.
+
+The file index is built lazily by `core/memory/index.sh ensure` — never on session start, only when memory is queried for the first time (or the index is older than `memory.indexMaxAgeSeconds`).
+
+Memory files (`.claude/project/memory/`):
+- `session.json` — turn-scoped state
+- `architecture.json` — lazy module summaries
+- `debug.json` — known/resolved failures, appended by `/debug`
+- `workflow.json` — commit-style vocabulary
+
+No embeddings, no API calls, no preload.
+
+---
+
+## Model Router
+
+`core/router/model-router.sh [intent]` emits one of `haiku|sonnet|opus`. Defaults follow `cortex.config.json → modelPolicy`:
+
+| Intent          | Tier   |
+|-----------------|--------|
+| `question`      | haiku  |
+| `commit`        | haiku  |
+| `bug_fix`       | sonnet |
+| `refactor`      | sonnet |
+| `debug`         | sonnet |
+| `feature`       | sonnet |
+| `migration`     | opus   |
+| _(default)_     | haiku  |
+
+Escalation (`model-router.sh escalate <tier>`) is invoked only when a lower tier returns `STATUS=INSUFFICIENT`.
+
+---
+
+## Commands
+
+In-Claude slash commands:
+
+| Command   | Purpose                                                          |
+|-----------|------------------------------------------------------------------|
+| `/debug`  | Runtime-aware debugging: 5 parallel probes + self-healing loop.  |
+| `/commit` | Conventional commit with branch routing.                         |
+
+Install / update / validate live in the **npx CLI** rather than as slash commands:
+```bash
+npx @cortex/cli init      # install + validate
+npx @cortex/cli update    # re-fetch + re-validate
+npx @cortex/cli doctor    # local sanity check
+```
+
+The earlier analyzer commands and the `/init-cortex` / `/update-cortex` slash commands were removed in the vNext redesign. Their work folds into `/debug` evidence, the npx CLI, or is performed ad-hoc by the model.
+
+---
+
+## CLI
+
+The CLI is the **canonical bootstrap** — there are no in-Claude `init` or `update` commands.
+
+```bash
+npx @cortex/cli init       # install + validate .claude/ in the current project
+npx @cortex/cli update     # re-fetch + re-validate (idempotent)
+npx @cortex/cli doctor     # local sanity check (no network)
+npx @cortex/cli --version
+```
+
+`init` and `update` both:
+1. Detect the project's languages.
+2. Download the matching skeleton + scanners from GitHub raw.
+3. Validate the registry against the filesystem (hooks present, commands present, settings wired).
+4. Prune stale scanner directories that aren't in the active language set.
+5. Create local-only directories (`cache/`, `logs/`, `temp/events/`, `state/`, `project/memory/`).
+
+`doctor` runs steps 3–5 in **check-only** mode (no scanner deletion, no installer).
+
+---
+
+## Configuration
+
+`.claude/config/cortex.config.json`:
 ```json
 {
-  "intent": "git_operation",
-  "explanation": "This command pushes local commits to a remote repository.",
-  "risks": ["data loss: --force may overwrite or destroy remote state"],
-  "suggestion": "Use 'git push --force-with-lease' instead",
-  "requiresConfirmation": true
+  "version": "4.0.0",
+  "riskThresholds":  { "warn": 30, "block": 70 },
+  "modelPolicy":     { "default": "haiku", "intents": { ... }, "escalation": [...] },
+  "eventBus":        { "maxJobs": 4 },
+  "planner":         { "maxJobs": 4 },
+  "memory":          { "indexMaxAgeSeconds": 3600 },
+  "debug":           { "expectedPorts": [...], "logPaths": [...] },
+  "cache":           { "scanTtlDays": 30 }
 }
 ```
 
-**PermissionDenied** — fires after denial. Transforms the unsafe command into a safe alternative and signals whether a retry is appropriate:
-```json
-{
-  "retry": true,
-  "originalCommand": "git push --force origin main",
-  "safeCommand": "git push --force-with-lease origin main",
-  "reason": "unsafe flag: --force can silently overwrite remote commits",
-  "message": "Replaced '--force' with '--force-with-lease'."
-}
-```
+---
 
-Safe transformations include: `rm -rf` → `rm -ri`, `git reset --hard` → `git stash`, `curl|sh` → download + inspect, `--no-verify` removed, `sudo` stripped. Exploit tools and reverse shells are never retried.
+## Performance Targets
+
+| Metric                        | Target            |
+|-------------------------------|-------------------|
+| Hook overhead (UserPromptSubmit) | < 50 ms        |
+| `bus.sh publish` latency       | < 30 ms          |
+| Startup cost                   | 0 ms (no SessionStart) |
+| Parallel debug probes          | ≤ planner.maxJobs |
+| Memory retrieval (5 files)     | < 200 ms          |
 
 ---
 
-### Session Profiler (`session-start.sh` v1.2.0)
+## Branch Protection
 
-Runs automatically when a session begins. Detects project type via a single `find` pass across all indicator files. Priority (highest wins): `dotnet > rust > java > node > go > python`.
-
-Extracts per project type:
-
-| Type | Dependencies | Entry Points |
-|---|---|---|
-| dotnet | `PackageReference` from `.csproj` | `Program.cs`, `Startup.cs`, `*Host*.cs` |
-| rust | `[dependencies]` from `Cargo.toml` | `src/main.rs`, `src/lib.rs` |
-| java | `<artifactId>` from `pom.xml` / Gradle deps | `*Application.java`, `Main.java` |
-| node | `dependencies` + `devDependencies` from `package.json` | `index.ts`, `app.ts`, `server.ts`, `main.ts` |
-| go | `require` block from `go.mod` | all `main.go` files |
-| python | `requirements.txt` or `[tool.poetry.dependencies]` | `main.py`, `app.py`, `manage.py`, `wsgi.py` |
-
-Writes `.claude/cache/project-profile.json`. Idempotent — skips rewrite if indicator file mtimes are unchanged. Also prunes scan cache entries older than 7 days. Output consumed by the prompt optimizer.
-
----
-
-### Prompt Optimizer (`prompt-optimizer.sh` v1.6.0)
-
-Intercepts every user prompt via the `UserPromptSubmit` hook (reads from stdin). Pipeline:
-
-1. **Normalize** — trim whitespace; skip prompts >8000 chars (pasted logs/diffs)
-2. **`--y` flag** — if prompt ends with `--y`, strip it and inject `GLOBAL ANSWER POLICY` (default all binary decisions to YES; security/destructive safeguards excluded)
-3. **Prompt cache** — skip re-processing identical prompts (cksum-keyed)
-4. **Detect intent** — single awk pass: `bug_fix` / `feature_request` / `refactor` / `explain` / `question`
-5. **Find relevant files** — file list cached per session (invalidated on cwd mtime change); git-changed files prioritized; keyword grep + stack-trace paths + naming heuristics
-6. **Extract snippets** — function-aware: walks back to nearest function/class boundary, tracks brace depth to find closing, extracts up to 30 lines
-7. **Load project profile** — reads `.claude/cache/project-profile.json` for project type
-8. **Output structured prompt** — replaces the raw prompt with intent, constraints, code context, and output format hints
-
----
-
-### Code Intelligence (`post-code-intel.sh`)
-
-Runs after every `Write` or `Edit` on `.cs .js .ts .jsx .tsx` files ≤ 1MB. Four lightweight regex-based checks:
-
-| Check | Mechanism | Threshold |
-|---|---|---|
-| Method length | Brace-depth tracking from declaration — combined single pass | > 50 lines |
-| Nesting depth | Live `{}` counter at conditional keywords — combined single pass | depth > 3 |
-| Duplication | cksum of 6-line sliding window (whitespace-normalized) | Same hash ≥ 6 lines apart |
-| Naming | Declaration regex vs. set of non-descriptive names | Capped at 3 per file |
-| Structure | Line count + UI×DB keyword cross-detection via direct grep | > 500 lines or mixed concerns |
-
-Outputs structured JSON to stdout. Never modifies files.
-
----
-
-### Registry-Driven Dispatch (`post-format.sh` v2.4.0 + `post-scan.sh` v2.5.0)
-
-Both hooks contain zero language-specific logic. All extension→scanner mappings live in `.claude/registry/scanners.json`. The registry covers 25 language directories:
-
-| Extension(s) | Scanner directory |
-|---|---|
-| `.cs` | `dotnet/` |
-| `.ts` `.tsx` `.js` `.jsx` `.vue` `.svelte` | `node/` |
-| `.py` | `python/` |
-| `.java` | `java/` |
-| `.go` | `go/` |
-| `.rs` | `rust/` |
-| `.sh` `.bash` | `bash/` |
-| `.php` | `php/` |
-| `.kt` `.kts` | `kotlin/` |
-| `.swift` | `swift/` |
-| `.dart` | `dart/` |
-| `.rb` | `ruby/` |
-| `.scala` `.sc` | `scala/` |
-| `.r` `.R` | `r/` |
-| `.sql` `.psql` `.pgsql` | `sql/` |
-| `.yaml` `.yml` | `yaml/` |
-| `.tf` `.tfvars` | `terraform/` |
-| `.ps1` `.psm1` `.psd1` | `powershell/` |
-| `.lua` | `lua/` |
-| `.proto` | `proto/` |
-| `.dockerfile` | `docker/` |
-| `.prompt` `.claude` | `ai-prompt/` |
-| `.mk` | `makefile/` |
-| `.cmake` | `cmake/` |
-| `.json` `.env` `.toml` `.ini` `.xml` `.graphql` `.gql` | `generic/` (secret scan only) |
-| `*` | `generic/secret-scan.sh` (all files) |
-
-To add a new language: add an entry to `scanners.json` and create the scanner script. No hook changes required.
-
----
-
-## Custom Commands
-
-| Command | Flags | Description |
-|---|---|---|
-| `/init-cortex` | — | Version-aware hook deployment, registry validation, settings check |
-| `/commit` | — | Interactive conventional commit with branch routing and auto-generated message |
-| `/doctor` | `--fix` `--deep` `--dry-run` | Full system diagnostics — checks hooks, settings, registry, scanners |
-| `/update-cortex` | — | Safely update `.claude/base/` from remote with diff preview |
-| `/impact` | `--staged` `--deep` `--since=<ref>` | Traces changed files through the dependency graph; assigns LOW/MEDIUM/HIGH risk |
-| `/regression` | `--save` `--reset` `--since=<ref>` `--deep` | Compares current diagnostics against a saved baseline; surfaces new and escalated issues |
-| `/hotspot` | `--since=<ref>` `--top=<n>` `--deep` | Scores files by change frequency, size, and deps; surfaces HIGH/MEDIUM risk areas |
-| `/pr-check` | `--branch=<name>` `--staged` `--skip-build` `--skip-tests` | Simulates full PR validation — build, format, security, architecture, commits, tests |
-| `/pattern-drift` | `--since=<ref>` `--deep` `--layer=<name>` | Detects deviations from dominant coding patterns inferred from the codebase |
-| `/optimize` | `--file=<path>` `--lang=<lang>` `--focus=perf\|clarity` | Optimizes code for performance and readability; preserves all signatures and behavior |
-| `/overengineering-check` | `--file=<path>` `--since=<ref>` `--deep` | Detects unnecessary abstractions, pass-through layers, unused generics, redundant DTOs |
-| `/timeline` | `--file=<path>` `--module=<dir>` `--depth=<n>` `--since=<date>` | Analyzes a file's git history; classifies as STABLE / EVOLVING / DEGRADED |
-| `/documentation` | — | Generates or updates a structured `/documentation` folder from real project analysis |
-| `/debug` | `--deep` `--ui` `--backend` `--value` `--fix` `--loop` `--endpoint=` `--file=` `--error=` `--payload=` | Autonomous full-stack debugging — traces flow, tracks values, finds exact root cause, applies fix, self-heals |
-
-Command implementations live in `.claude/commands/`. The `command-runner.sh` at `.claude/core/runtime/` validates and dispatches each invocation.
-
----
-
-## Impact Analysis (`/impact`)
-
-Traces changed files through the project's dependency graph and assigns a risk level.
-
-**Modes:**
-
-| Flag | Behavior |
-|---|---|
-| *(none)* | Analyzes all uncommitted changes (`git diff HEAD`) |
-| `--staged` | Analyzes only staged changes (`git diff --cached`) |
-| `--since=<ref>` | Analyzes changes since a commit or branch (`git diff <ref>...HEAD`) |
-| `--deep` | Traces transitive consumers up to 2 levels deep |
-
-**Pipeline:** collect changed files → classify by type (Controller / Service / Repository / DTO / Configuration / Schema / Hook / Scanner) → trace consumers via Grep → calculate metrics → assign risk level → generate WHY explanation + FIX recommendation.
-
-**Risk levels:**
-
-| Condition | Risk |
-|---|---|
-| Any Schema/Migration change | HIGH |
-| Repository change with ≥2 Service consumers | HIGH |
-| Layers touched ≥ 3 | HIGH |
-| Configuration change affecting ≥2 consumers | HIGH |
-| DTO change with ≥3 consumers | HIGH |
-| Layers touched == 2 or Service with Controller consumer | MEDIUM |
-| All changes isolated to 1 layer ≤2 consumers | LOW |
-
-Output: `[PASS / WARN / FAIL]` status block with impact summary, per-file consumer traces, affected endpoints, DB tables, and a single deterministic FIX recommendation.
-
----
-
-## Regression Detection (`/regression`)
-
-Compares the current `/doctor` output against a saved baseline snapshot to surface new and escalated issues.
-
-**Modes:**
-
-| Flag | Behavior |
-|---|---|
-| *(none)* | Compare against latest snapshot; do not save |
-| `--save` | Compare, then write current state as new baseline |
-| `--reset` | Delete snapshot; save current state as fresh baseline; skip comparison |
-| `--since=<ref>` | Compare against the snapshot closest to the given git ref |
-| `--deep` | Run extended `/doctor` diagnostics when collecting current state |
-
-**State files** (in `.claude/state/`):
-- `snapshot.json` — latest baseline (issues array + git commit + timestamp)
-- `index.json` — history of all saved snapshots
-
-**Comparison logic:** issues are fingerprinted as `domain:type:title:file:line`. New issues and severity escalations (`WARNING → ERROR`) are regressions; resolved issues and severity reductions are improvements. Root cause is traced via `git log` between the snapshot commit and `HEAD`.
-
-Output: structured `REGRESSION REPORT` with per-issue WHY sentences and FIX actions, plus a summary table.
-
----
-
-## Hotspot Detection (`/hotspot`)
-
-Identifies unstable, high-risk files by combining commit frequency, file size, and dependency count into a composite score.
-
-**Score formula:** `(change_freq × 3) + (size_lines / 50) + (dep_count × 2)`
-
-| Score | Risk |
-|---|---|
-| ≥ 40 | HIGH |
-| 20–39 | MEDIUM |
-| < 20 | excluded from output |
-
-Renames are collapsed before scoring (a moved file counts as one, not two). Outputs a **Stability Index** (0–100) for the overall codebase.
-
----
-
-## PR Simulation (`/pr-check`)
-
-Validates the current branch against 6 checks before merging.
-
-| Check | Blocks PR? | Notes |
-|---|---|---|
-| Build | Yes | Runs detected build command; captures exit code |
-| Format | No (WARN) | Runs registry-matched formatters with `--check` flag |
-| Security scan | Yes | Runs generic secret scan + extension-specific scanners |
-| Architecture | Yes (structural) / No (WARN) | Complexity, nesting, naming, separation of concerns |
-| Commit messages | Yes (Claude attribution) / No (WARN) | Validates conventional commit format |
-| Test presence | No (WARN) | Checks for corresponding test files by naming convention |
-
-Output: `ACCEPTED` / `WARNING` / `REJECTED` with exact fix steps per failing check.
-
----
-
-## Pattern Drift Detection (`/pattern-drift`)
-
-Infers dominant coding patterns from unchanged files and flags deviations in changed files.
-
-- **60% prevalence threshold** — only flags where a genuine majority pattern exists
-- **Intentionality check** — deviation in ≥2 changed files → `INTENTIONAL CHANGE` (WARN); isolated deviation → `ISOLATED DRIFT` (FAIL)
-- Covers: injection style, return types, interface presence, DTO naming, error handling, ORM patterns, Cortex hook conventions
-- Never flags test files
-
----
-
-## Code Optimization (`/optimize`)
-
-Analyzes a file for three issue categories and rewrites only the affected constructs.
-
-| Category | Examples |
-|---|---|
-| Performance | N+1 queries, O(n²) loops, unnecessary allocations, missing async, `SELECT *` |
-| Complexity | Deep nesting (>3 levels), methods >50 lines, double negatives |
-| Redundancy | Dead assignments, duplicate conditionals, no-op operations |
-
-Constraints: never changes signatures, never introduces new abstractions, never imports new dependencies, never rewrites test files, never claims performance gains without a complexity argument.
-
----
-
-## Overengineering Detection (`/overengineering-check`)
-
-Seven named patterns with precise detection thresholds:
-
-| Pattern | Trigger | Severity |
-|---|---|---|
-| `SINGLE_IMPL_INTERFACE` | Interface with exactly 1 impl, no test mocks | MEDIUM |
-| `PASSTHROUGH_ABSTRACTION` | All public methods are pure delegates | HIGH |
-| `UNUSED_GENERICS` | Generic called with only 1 concrete type | MEDIUM |
-| `STRUCTURAL_NESTING` | Depth >4 with no branching logic | LOW–MEDIUM |
-| `SINGLE_USE_FACTORY` | Factory/builder invoked at exactly 1 site | MEDIUM |
-| `REDUNDANT_DTO` | DTO ≥90% property overlap with entity, no transformation | LOW |
-| `MULTI_RESPONSIBILITY_HOOK` / `MIXED_SCANNER` | Cortex separation-of-concerns violation | HIGH |
-
-Includes a **simplification safety check** — if removing the abstraction requires changes in >3 files or the interface is used in test mocks, severity is downgraded to LOW and flagged for manual review.
-
----
-
-## Code Evolution Timeline (`/timeline`)
-
-Analyzes a file or module's full git history and classifies its current state.
-
-**Phase grouping:** commits are grouped into phases (max 6) using a sliding 20% window algorithm. Each phase is labeled: Initial Implementation, Feature Growth, Bug Fix Cycle, Hotfix Pressure, Refactor / Stabilization, Maintenance, Instability (Reverts).
-
-**Instability signals:**
-
-| Signal | Condition |
-|---|---|
-| `SIGNAL_HIGH_FIX_RATIO` | FIX+HOTFIX commits > 30% of total |
-| `SIGNAL_REVERTS` | ≥2 revert commits |
-| `SIGNAL_REFACTOR_INSTABILITY` | ≥2 FIX commits within 5 commits of a REFACTOR |
-| `SIGNAL_FIX_CLUSTER` | Any 10-commit window with >50% fix commits |
-| `SIGNAL_CURRENT_PRESSURE` | Current phase is dominated by FIX/HOTFIX |
-| `SIGNAL_ACTIVE_STABILIZATION` | Current phase is REFACTOR with ≥3 commits |
-
-**States:** `STABLE` / `EVOLVING` / `DEGRADED`. FIX recommendation generated only for DEGRADED state.
-
----
-
-## Autonomous Debugging Engine (`/debug`)
-
-Transforms Claude into a self-healing debugger. Accepts direct invocation with flags or suffix mode (append `/debug` to any natural-language prompt).
-
-**Invocation modes:**
-```
-/debug --endpoint=/api/cases/create
-/debug --file=CaseService.cs --backend --fix
-login returns 401 /debug
-checkout button does nothing /debug
-```
-
-**What it does:**
-1. Infers the problem from symptom keywords, HTTP codes, stack traces, or `--error` flag
-2. Discovers relevant files via Grep/Glob (never reads code without locating it first)
-3. Traces the full execution path: `Frontend → API → Controller → Service → Repository → Database → Response`
-4. Tracks values at fault sites — null dereferences, type mismatches, overwritten variables, stale state
-5. Identifies a single root cause with a confidence level (HIGH / MEDIUM / LOW)
-6. Applies a minimal surgical fix (one edit per file, no new abstractions)
-7. Checks co-located test files and reports test status
-8. Re-traces after the fix and repeats until `STATUS = RESOLVED`
-
-**Core flags:**
-
-| Flag | Behavior |
-|---|---|
-| `--deep` | Extend trace to Middleware / Interceptors / Validators / env layers |
-| `--ui` | Force frontend analysis + snapshot regardless of file type |
-| `--backend` | Restrict to backend layers only; skip all frontend steps |
-| `--value` | Verbose value tracking across every layer (default: anomalous layers only) |
-| `--fix` | Suppress ISSUE and FLOW sections — output patch only |
-| `--loop` | Remove the 3-iteration self-healing cap |
-
-**Input flags:** `--endpoint=`, `--file=`, `--error="..."`, `--payload='...'`
-
-**Default behavior** (no flags): full-stack trace, fault-zone value tracking, 3-iteration self-healing cap.
-
----
-
-## Documentation Generator (`/documentation`)
-
-Creates or updates a structured `/documentation` folder in the project root from real project analysis.
-
-**Pipeline:**
-
-1. Read `CLAUDE.md` (if present) as the authoritative source for architecture and constraints
-2. Read all existing files in `documentation/` and decide per-file: create, improve, or leave unchanged
-3. Analyze the project — detect type (.NET, Node, Python, Go, Cortex), locate entry points, key directories, and API surface
-4. Write only valid Markdown files; never generate content outside `documentation/`
-
-**Output files:**
-
-| File | Created when |
-|---|---|
-| `README.md` | Always |
-| `overview.md` | Always |
-| `architecture.md` | Always |
-| `setup.md` | Always |
-| `usage.md` | Always |
-| `commands.md` | Cortex detected (`.claude/` with `core/` present) |
-| `modules.md` | Always |
-| `api.md` | Backend / API surface detected |
-
----
-
-## Safe Update System
-
-- **`base/`** — canonical framework files from the remote Cortex repo. Updated by `/update-cortex`.
-- **`local/`** — project-specific overrides. Never touched by any automated process.
-
-`/update-cortex` fetches changes, shows a diff, asks for confirmation, updates only `base/`, then re-runs `/init-cortex` to redeploy updated hooks.
-
----
-
-## Deploying Hook Changes
-
-1. Edit the source hook in `.claude/core/hooks/`
-2. Increment `# @version: X.Y.Z` on line 2
-3. Update the version in `.claude/registry/hooks.json`
-4. Copy `.claude/` to `~/.claude/` (or run `/init-cortex`)
-
-`/init-cortex` version-compares source vs runtime and deploys only what changed.
+Never commit or push directly to `main`, `master`, or `develop`. Always work on a feature branch and open a PR.

@@ -1,3 +1,24 @@
+# Cortex runtime / local state — never commit
 .claude/settings.local.json
+.claude/cache/
+.claude/logs/
+.claude/temp/
+.claude/state/
+
+# Project memory state (session-specific; stub schemas are committed below the dirs)
+.claude/project/memory/plans/
+.claude/project/memory/plans.json
+
+# Legacy paths from earlier framework versions
 .cortex/cache/
 .cortex/base/
+
+# Node / npm
+node_modules/
+*.log
+npm-debug.log*
+.npm/
+
+# OS junk
+Thumbs.db
+.DS_Store

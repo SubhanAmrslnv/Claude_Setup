@@ -1,8 +1,34 @@
 {
-  "version": "3.2.0",
+  "version": "4.0.0",
   "riskThresholds": {
     "warn": 30,
     "block": 70
+  },
+  "modelPolicy": {
+    "default": "haiku",
+    "intents": {
+      "bug_fix": "sonnet",
+      "refactor": "sonnet",
+      "debug": "sonnet",
+      "feature": "sonnet",
+      "migration": "opus",
+      "question": "haiku",
+      "commit": "haiku"
+    },
+    "escalation": ["haiku", "sonnet", "opus"]
+  },
+  "eventBus": {
+    "maxJobs": 4
+  },
+  "planner": {
+    "maxJobs": 4
+  },
+  "memory": {
+    "indexMaxAgeSeconds": 3600
+  },
+  "debug": {
+    "expectedPorts": [3000, 3001, 4200, 5000, 5173, 8000, 8080, 8081, 5500],
+    "logPaths": ["logs/*.log", "*.log", "npm-debug.log", "stdout_*.log"]
   },
   "cache": {
     "scanTtlDays": 30
