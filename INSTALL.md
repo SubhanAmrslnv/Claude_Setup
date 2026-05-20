@@ -147,7 +147,7 @@ There is no other state to clean. Cortex never writes outside the project direct
 ```json
 {
   "riskThresholds":  { "warn": 30, "block": 70 },
-  "modelPolicy":     { "default": "haiku", "intents": { ... } },
+  "modelPolicy":     { "default": "sonnet", "intents": { ... 32 keys ... } },
   "eventBus":        { "maxJobs": 4 },
   "planner":         { "maxJobs": 4 },
   "memory":          { "indexMaxAgeSeconds": 3600 },

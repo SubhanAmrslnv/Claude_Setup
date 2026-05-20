@@ -16,7 +16,7 @@
     "source": "core/hooks/guards/permission-denied.sh"
   },
   "prompt-router.sh": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "source": "core/hooks/runtime/prompt-router.sh"
   },
   "post-format.sh": {

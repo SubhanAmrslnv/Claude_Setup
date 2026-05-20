@@ -122,20 +122,19 @@ No embeddings, no API calls, no preload.
 
 ## Model Router
 
-`core/router/model-router.sh [intent]` emits one of `haiku|sonnet|opus`. Defaults follow `cortex.config.json → modelPolicy`:
+`core/router/model-router.sh [intent]` reads `cortex.config.json → modelPolicy` and emits `haiku | sonnet | opus`. The router is advisory; Claude Code's active model is set by the user.
 
-| Intent          | Tier   |
-|-----------------|--------|
-| `question`      | haiku  |
-| `commit`        | haiku  |
-| `bug_fix`       | sonnet |
-| `refactor`      | sonnet |
-| `debug`         | sonnet |
-| `feature`       | sonnet |
-| `migration`     | opus   |
-| _(default)_     | haiku  |
+**32-intent taxonomy** — full table in `cortex.config.json → modelPolicy.intents`:
 
-Escalation (`model-router.sh escalate <tier>`) is invoked only when a lower tier returns `STATUS=INSUFFICIENT`.
+| Tier   | Count | Examples |
+|--------|-------|----------|
+| haiku  | 10    | `question`, `explain_code`, `commit_message`, `format_code`, `rename`, `typo_fix`, `docstring`, `boilerplate`, `unit_test_simple`, `bug_fix_trivial` |
+| sonnet | 12    | `code_review_light`, `bug_fix`, `refactor`, `debug`, `feature_small`, `unit_test_complex`, `integration_test`, `api_design`, `query_optimization`, `dependency_upgrade`, `documentation`, `migration_trivial` |
+| opus   | 10    | `feature_large`, `architecture`, `migration_schema`, `migration_framework`, `security_review`, `performance_audit`, `incident_rca`, `code_review_deep`, `multi_repo_change`, `legacy_modernization` |
+
+**Default tier is `sonnet`** — under-tiering is the bigger risk than over-tiering for real dev work. Haiku-tier intents only trigger when the prompt explicitly signals triviality (`typo`, `trivial`, `pure function`, etc.). Opus-tier intents need explicit signals (`security review`, `architecture`, `incident`, `schema migration`, `framework upgrade`, `deep review`, `cross-cutting feature`, `multi-repo`).
+
+Escalation: `model-router.sh escalate <tier>` returns the next tier (haiku → sonnet → opus; opus is terminal). Invoked only when a lower tier returns `STATUS=INSUFFICIENT`.
 
 ---
 
@@ -188,7 +187,7 @@ npx @cortex/cli --version
 {
   "version": "4.0.0",
   "riskThresholds":  { "warn": 30, "block": 70 },
-  "modelPolicy":     { "default": "haiku", "intents": { ... }, "escalation": [...] },
+  "modelPolicy":     { "default": "sonnet", "intents": { ... 32 keys ... }, "escalation": ["haiku","sonnet","opus"] },
   "eventBus":        { "maxJobs": 4 },
   "planner":         { "maxJobs": 4 },
   "memory":          { "indexMaxAgeSeconds": 3600 },

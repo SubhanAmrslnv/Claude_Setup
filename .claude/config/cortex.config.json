@@ -1,19 +1,46 @@
 {
-  "version": "4.0.0",
+  "version": "4.1.0",
   "riskThresholds": {
     "warn": 30,
     "block": 70
   },
   "modelPolicy": {
-    "default": "haiku",
+    "default": "sonnet",
     "intents": {
-      "bug_fix": "sonnet",
-      "refactor": "sonnet",
-      "debug": "sonnet",
-      "feature": "sonnet",
-      "migration": "opus",
-      "question": "haiku",
-      "commit": "haiku"
+      "question":             "haiku",
+      "explain_code":         "haiku",
+      "commit_message":       "haiku",
+      "format_code":          "haiku",
+      "rename":               "haiku",
+      "typo_fix":             "haiku",
+      "docstring":            "haiku",
+      "boilerplate":          "haiku",
+      "unit_test_simple":     "haiku",
+      "bug_fix_trivial":      "haiku",
+
+      "code_review_light":    "sonnet",
+      "bug_fix":              "sonnet",
+      "refactor":             "sonnet",
+      "debug":                "sonnet",
+      "feature_small":        "sonnet",
+      "unit_test_complex":    "sonnet",
+      "integration_test":     "sonnet",
+      "api_design":           "sonnet",
+      "query_optimization":   "sonnet",
+      "dependency_upgrade":   "sonnet",
+      "documentation":        "sonnet",
+      "migration_trivial":    "sonnet",
+
+      "feature_large":        "opus",
+      "architecture":         "opus",
+      "migration_schema":     "opus",
+      "migration_framework":  "opus",
+      "security_review":      "opus",
+      "performance_audit":    "opus",
+      "incident_rca":         "opus",
+      "code_review_deep":     "opus",
+      "multi_repo_change":    "opus",
+      "legacy_modernization": "opus"
     },
     "escalation": ["haiku", "sonnet", "opus"]
   },

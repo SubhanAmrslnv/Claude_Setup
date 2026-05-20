@@ -1,10 +1,12 @@
 # /commit — Fast Intelligent Commit Creation
 
-## STEP 1 — Detect current branch
+## STEP 1 — Detect current branch (mandatory)
 
 Run: `git rev-parse --abbrev-ref HEAD`
 
 Save as `CURRENT_BRANCH`.
+
+**Never** auto-create a new branch. The user manages branching. This command's role is to commit on whatever branch is checked out, after explicit confirmation when the branch is protected (see Step 6).
 
 ---
 
@@ -78,20 +80,23 @@ Compute:
 
 ### CASE A — Protected branch (main, master, develop)
 
-Ask the user:
-> "You are on a protected branch (`<CURRENT_BRANCH>`). Enter a new branch name:"
+Print the warning:
+```
+[WARN]
 
-Wait for explicit user input. Do NOT auto-generate a branch name.
+You are on a protected branch (<CURRENT_BRANCH>).
+Committing directly here is allowed but discouraged for shared codebases.
+Choose:
+  (y) commit on <CURRENT_BRANCH> anyway
+  (n) cancel and let me switch branches myself
+```
 
-Then ask:
-> "Enter the commit subject line:"
+Wait for explicit user input.
 
-Wait for explicit user input. Do NOT proceed until provided.
+- If the user answers `y`: proceed to the same auto-generation flow as CASE B (no manual subject required), then commit on `<CURRENT_BRANCH>`.
+- If the user answers `n` (or anything else): print `[PASS] Commit cancelled. Use \`git checkout -b <new-branch>\` and re-run /commit.` and stop.
 
-Once inputs are provided:
-1. Run: `git checkout -b <branch-name>`
-2. Print: `Branch '<branch-name>' created.`
-3. Proceed to Step 7 using user-provided subject.
+**Never run `git checkout -b` from inside this command.** Branch creation is the user's decision, not the command's.
 
 ### CASE B — Safe branch
 

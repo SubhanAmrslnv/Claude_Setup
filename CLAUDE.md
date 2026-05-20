@@ -180,20 +180,19 @@ Available subcommands:
 
 ## Model Router (Advisory)
 
-`core/router/model-router.sh [intent]` reads `cortex.config.json → modelPolicy`. Defaults:
+`core/router/model-router.sh [intent]` reads `cortex.config.json → modelPolicy` and emits one of `haiku | sonnet | opus`. The router is advisory; Claude Code's active model is set by the user. `model-router.sh escalate <tier>` returns the next tier (opus is terminal).
 
-| Intent      | Tier   |
-|-------------|--------|
-| question    | haiku  |
-| commit      | haiku  |
-| bug_fix     | sonnet |
-| refactor    | sonnet |
-| debug       | sonnet |
-| feature     | sonnet |
-| migration   | opus   |
-| _(default)_ | haiku  |
+**32-intent taxonomy** (full table in `cortex.config.json → modelPolicy.intents`):
 
-`model-router.sh escalate <tier>` returns the next tier. Opus is terminal. The router is advisory; Claude Code's actual model is set by the user.
+| Tier   | Count | Examples |
+|--------|-------|----------|
+| haiku  | 10    | `question`, `explain_code`, `commit_message`, `format_code`, `rename`, `typo_fix`, `docstring`, `boilerplate`, `unit_test_simple`, `bug_fix_trivial` |
+| sonnet | 12    | `code_review_light`, `bug_fix`, `refactor`, `debug`, `feature_small`, `unit_test_complex`, `integration_test`, `api_design`, `query_optimization`, `dependency_upgrade`, `documentation`, `migration_trivial` |
+| opus   | 10    | `feature_large`, `architecture`, `migration_schema`, `migration_framework`, `security_review`, `performance_audit`, `incident_rca`, `code_review_deep`, `multi_repo_change`, `legacy_modernization` |
+
+**Default tier is `sonnet`** — most real dev work is non-trivial, so under-tiering is the bigger risk than over-tiering. Haiku-tier intents require explicit "trivial / simple / pure / typo / rename" keywords in the prompt; opus-tier intents need explicit signals like "security review", "architecture", "incident", "migration_schema", "deep review", or "cross-cutting feature".
+
+The classifier (`core/hooks/runtime/prompt-router.sh` v1.1.0) is a priority-ordered keyword cascade. First match wins, with opus tier tested before sonnet, and haiku-tier markers tested last so ambiguous prompts escalate rather than under-tier.
 
 ---
 
@@ -246,8 +245,15 @@ The analyzer commands (`/doctor`, `/hotspot`, `/impact`, `/timeline`, `/optimize
 ### Conventional commits (enforced by `pre-guard.sh`)
 Format: `type(scope): message`. Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `style`, `perf`. No Claude/Anthropic attribution. No `🤖` emoji.
 
-### Branch protection
-Never commit or push directly to `main`, `master`, or `develop`. Always work on a feature branch and open a PR.
+### Git policy
+
+**Edit on the current branch.** Do not auto-create a new branch when making code changes — stay on whatever branch is checked out. The user manages branching; do not invent process around it. Never run `git checkout -b` without an explicit instruction.
+
+**Never commit unless the user explicitly says so.** Trigger phrases: `commit`, `commit this`, `commit changes`, `/commit`, or a direct imperative like `commit and push`. Anything else — `"looks good"`, `"ship it"`, `"finalize"`, end-of-session pauses, plan completions — does **not** authorize a commit. After making changes, leave the working tree as-is and report back; do not run `git commit`.
+
+When the user does ask to commit:
+- The `/commit` command checks the current branch and warns explicitly if it is `main`, `master`, or `develop` before proceeding (it asks `y/n`; it never runs `git checkout -b` itself).
+- Pushing to a protected branch still earns +20 risk from `pre-guard.sh`; the user can confirm or back out.
 
 ---
 

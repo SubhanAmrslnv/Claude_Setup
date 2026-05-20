@@ -65,11 +65,18 @@ if [[ -n "$transcript_path" && -f "$transcript_path" ]]; then
       ' 2>/dev/null | tr -d '\r')
   if [[ "$used" =~ ^[0-9]+$ && "$used" -gt 0 ]]; then
     context_used_tokens=$used
-    # Auto-detect window: 200k standard, 1M when token usage clearly exceeds 200k.
-    # Override via cortex.config.json → statusLine.contextWindow.
+    # Model-aware context window: Opus runs on a 1M-token window, Sonnet/Haiku
+    # on 200k. Override per-project via cortex.config.json → statusLine.contextWindow.
     ctx_window=$(cortex_config '.statusLine.contextWindow' '')
     if ! [[ "$ctx_window" =~ ^[0-9]+$ ]]; then
-      if (( used > 200000 )); then ctx_window=1000000; else ctx_window=200000; fi
+      model_lc=$(echo "$model" | tr '[:upper:]' '[:lower:]')
+      case "$model_lc" in
+        *opus*)   ctx_window=1000000 ;;
+        *sonnet*) ctx_window=200000 ;;
+        *haiku*)  ctx_window=200000 ;;
+        *)        # Unknown model — fall back to usage-driven auto-detect.
+                  if (( used > 200000 )); then ctx_window=1000000; else ctx_window=200000; fi ;;
+      esac
     fi
     pct=$(( used * 100 / ctx_window ))
     (( pct > 100 )) && pct=100
