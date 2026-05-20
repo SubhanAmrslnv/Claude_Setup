@@ -1,116 +1,80 @@
 #!/usr/bin/env bash
 # Shared installer core — used by scripts/install.sh and bin/cortex (init).
 #
-# Required env:
-#   CORTEX_REPO_RAW   e.g. https://raw.githubusercontent.com/<org>/cortex/main
-#   CORTEX_TARGET     destination project root (defaults to $PWD)
+# Strategy: shallow + sparse `git clone` of the Cortex repo, then copy `.claude/`
+# into the target project. Overlay semantics — user-local state preserved.
 #
-# Detects languages in the target, downloads:
-#   - skeleton (.claude/{settings.json,registry/*,config/*,core/shared,core/events,
-#                        core/hooks,core/planner,core/router,core/memory,
-#                        core/debug,project/memory/*})
-#   - scanners only for detected languages + generic
-# Idempotent: re-running upgrades in place.
+# Env:
+#   CORTEX_TARGET     destination project root (defaults to $PWD)
+#   CORTEX_REPO_URL   full clone URL (default https://github.com/SubhanAmrslnv/Cortex.git)
+#   CORTEX_REPO_ORG   org slug (used only if CORTEX_REPO_URL unset; default SubhanAmrslnv)
+#   CORTEX_REPO_NAME  repo slug (used only if CORTEX_REPO_URL unset; default Cortex)
+#   CORTEX_REF        branch/tag/sha to clone (default main)
 
 set -eu
 
-: "${CORTEX_REPO_RAW:?CORTEX_REPO_RAW is required}"
 target="${CORTEX_TARGET:-$PWD}"
+ref="${CORTEX_REF:-main}"
+repo_url="${CORTEX_REPO_URL:-https://github.com/${CORTEX_REPO_ORG:-SubhanAmrslnv}/${CORTEX_REPO_NAME:-Cortex}.git}"
+
+say()  { printf "[cortex] %s\n" "$*"; }
+fail() { printf "[cortex] error: %s\n" "$*" >&2; exit 1; }
+
+command -v git >/dev/null 2>&1 || fail "git is required (install Git for Windows, Xcode CLT, or your distro's git package)."
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+say "cloning $repo_url@$ref (sparse: .claude/)"
+git clone --depth 1 --filter=blob:none --sparse --branch "$ref" "$repo_url" "$tmp" >/dev/null 2>&1 \
+  || fail "git clone failed (repo=$repo_url ref=$ref)."
+git -C "$tmp" sparse-checkout set .claude >/dev/null 2>&1 \
+  || fail "sparse-checkout set .claude failed."
+
+[ -d "$tmp/.claude" ] || fail "$repo_url@$ref does not contain a .claude/ directory."
+
 mkdir -p "$target/.claude"
 
-say() { printf "[cortex] %s\n" "$*"; }
-
-fetch() {
-  local rel="$1" dst="$target/.claude/$1"
-  mkdir -p "$(dirname "$dst")"
-  curl -fsSL "$CORTEX_REPO_RAW/.claude/$rel" -o "$dst"
+# Overlay copy. Preserve user-local subtrees if they already exist in the target.
+preserve=(project/memory cache logs temp state)
+is_preserved() {
+  local rel="$1"
+  for p in "${preserve[@]}"; do
+    [ "$rel" = "$p" ] && return 0
+  done
+  return 1
 }
 
-# ── Language detection ──────────────────────────────────────────────────────
-langs=("generic")
-[[ -f "$target/package.json" ]]                                            && langs+=("node")
-compgen -G "$target/*.csproj" >/dev/null 2>&1                              && langs+=("dotnet")
-compgen -G "$target/*.sln" >/dev/null 2>&1                                 && langs+=("dotnet")
-[[ -f "$target/go.mod" ]]                                                  && langs+=("go")
-[[ -f "$target/Cargo.toml" ]]                                              && langs+=("rust")
-[[ -f "$target/pyproject.toml" || -f "$target/requirements.txt" || -f "$target/setup.py" ]] && langs+=("python")
-[[ -f "$target/pom.xml" || -f "$target/build.gradle" || -f "$target/build.gradle.kts" ]]   && langs+=("java")
-compgen -G "$target/Dockerfile*" >/dev/null 2>&1                           && langs+=("docker")
-compgen -G "$target/*.tf" >/dev/null 2>&1                                  && langs+=("terraform")
-compgen -G "$target/*.sh" >/dev/null 2>&1                                  && langs+=("bash")
+shopt -s dotglob nullglob
 
-# dedupe
-langs=( $(printf "%s\n" "${langs[@]}" | awk '!seen[$0]++') )
-say "detected languages: ${langs[*]}"
+copy_tree() {
+  local src="$1" dst="$2" rel="$3"
+  if is_preserved "$rel" && [ -e "$dst" ]; then
+    return 0
+  fi
+  if [ -d "$src" ]; then
+    mkdir -p "$dst"
+    for entry in "$src"/*; do
+      local name; name="$(basename "$entry")"
+      copy_tree "$entry" "$dst/$name" "${rel:+$rel/}$name"
+    done
+  else
+    cp -f "$src" "$dst"
+  fi
+}
 
-# ── Skeleton fetch ──────────────────────────────────────────────────────────
-skeleton=(
-  "settings.json"
-  "registry/hooks.json"
-  "registry/commands.json"
-  "registry/scanners.json"
-  "config/cortex.config.json"
-  "core/shared/bootstrap.sh"
-  "core/events/bus.sh"
-  "core/events/dispatcher.sh"
-  "core/events/subscriptions.json"
-  "core/hooks/guards/pre-guard.sh"
-  "core/hooks/guards/permission-request.sh"
-  "core/hooks/guards/permission-denied.sh"
-  "core/hooks/runtime/prompt-router.sh"
-  "core/hooks/runtime/post-format.sh"
-  "core/hooks/runtime/post-scan.sh"
-  "core/hooks/runtime/post-error-analyzer.sh"
-  "core/hooks/runtime/stop-build.sh"
-  "core/planner/planner-engine.sh"
-  "core/planner/task-graph.sh"
-  "core/planner/worker-pool.sh"
-  "core/planner/merge-engine.sh"
-  "core/router/model-router.sh"
-  "core/memory/index.sh"
-  "core/memory/retrieve.sh"
-  "core/debug/runtime-monitor.sh"
-  "core/debug/process-inspector.sh"
-  "core/debug/log-stream.sh"
-  "core/debug/build-watcher.sh"
-  "core/debug/test-replay.sh"
-  "core/debug/network-trace.sh"
-  "core/debug/browser-trace.sh"
-  "core/statusline/render.sh"
-  "commands/debug.md"
-  "commands/commit.md"
-  "project/memory/session.json"
-  "project/memory/architecture.json"
-  "project/memory/debug.json"
-  "project/memory/workflow.json"
-)
-for f in "${skeleton[@]}"; do
-  fetch "$f"
+for entry in "$tmp/.claude"/*; do
+  name="$(basename "$entry")"
+  copy_tree "$entry" "$target/.claude/$name" "$name"
 done
 
-# ── Scanners (language-aware) ───────────────────────────────────────────────
-# scanners.json maps extensions → scripts. We fetch only the directories whose
-# names appear in $langs.
-say "fetching scanners: ${langs[*]}"
-tmp_scan="$(mktemp)"; trap 'rm -f "$tmp_scan"' EXIT
-curl -fsSL "$CORTEX_REPO_RAW/.claude/registry/scanners.json" -o "$tmp_scan"
-mapfile -t scripts < <(jq -r '[.[][]] | unique[]' "$tmp_scan" 2>/dev/null)
-for s in "${scripts[@]}"; do
-  lang="${s%%/*}"
-  for keep in "${langs[@]}"; do
-    if [[ "$lang" == "$keep" ]]; then
-      fetch "core/scanners/$s"
-      break
-    fi
-  done
-done
+shopt -u dotglob nullglob
 
-# ── Make hooks executable (POSIX systems) ───────────────────────────────────
-chmod +x "$target/.claude"/core/{shared,events,hooks/guards,hooks/runtime,planner,router,memory,debug}/*.sh 2>/dev/null || true
-chmod +x "$target/.claude"/core/scanners/**/*.sh 2>/dev/null || true
+# Local-only state dirs (ensure they exist even on fresh installs).
+mkdir -p "$target/.claude"/{cache,logs,temp/events,state,project/memory/plans}
 
-# ── Local-only state dirs ───────────────────────────────────────────────────
-mkdir -p "$target/.claude"/{cache,logs,temp/events,state}
+# Make hooks/scanners executable on POSIX systems.
+find "$target/.claude/core" -type f -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
 
-say "Cortex installed at $target/.claude (languages: ${langs[*]})"
-say "Next: open Claude Code in this project and run /init-cortex"
+say "Cortex installed at $target/.claude (ref=$ref)"
+say "Next: open Claude Code in this project."

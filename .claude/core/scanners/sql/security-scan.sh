@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.0.0
+# @version: 1.0.1
 # Scans .sql files for SELECT *, unsafe DROP/TRUNCATE, UPDATE/DELETE without WHERE,
 # GRANT ALL, hardcoded credentials in connection strings, and insecure HTTP.
 # Usage: security-scan.sh <file_path>
@@ -20,8 +20,12 @@ if grep -qiE '\bTRUNCATE\b' "$file"; then
   echo "[WARNING] TRUNCATE in $file — destructive operation, verify intent"
 fi
 
-if grep -qiE '\b(UPDATE|DELETE)\b[^;]*(FROM\s+\w+\s*;|\bWHERE\b)' "$file" || \
-   grep -qiE '\b(UPDATE|DELETE FROM)\s+\w+\s*;' "$file"; then
+# Single-statement UPDATE/DELETE that reaches `;` without a WHERE clause.
+# Conservative: doesn't try to span multi-line statements (grep can't reliably
+# do that without a real parser); over-warns less and avoids the prior false
+# positive that fired whenever WHERE was present.
+if grep -qiE '^\s*(UPDATE\s+\w+\s+SET\s+[^;]*;|DELETE\s+FROM\s+\w+\s*;)' "$file" && \
+   ! grep -qiE '^\s*(UPDATE|DELETE)\b[^;]*\bWHERE\b' "$file"; then
   echo "[WARNING] UPDATE or DELETE without WHERE clause in $file — may affect all rows"
 fi
 

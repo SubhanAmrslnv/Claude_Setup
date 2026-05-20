@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.0.0
+# @version: 1.0.1
 # Scans .sh/.bash files for hardcoded secrets, eval, exec with variables,
 # curl|bash, rm -rf with variables, chmod 777, insecure HTTP, and unquoted vars.
 # Usage: security-scan.sh <file_path>
@@ -24,7 +24,7 @@ if grep -qiE 'curl\s+.*\|\s*(bash|sh)\b|wget\s+.*\|\s*(bash|sh)\b' "$file"; then
   echo "[WARNING] curl/wget piped to shell in $file — remote code execution risk"
 fi
 
-if grep -qiE 'rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\$\{?' "$file"; then
+if grep -qiE 'rm\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r|-r\s+-f|-f\s+-r|--recursive|--force).*\$\{?' "$file"; then
   echo "[WARNING] rm -rf with variable in $file — verify path cannot be empty or malicious"
 fi
 

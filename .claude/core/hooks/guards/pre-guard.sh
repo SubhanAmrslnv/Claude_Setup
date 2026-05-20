@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 2.4.0
+# @version: 2.4.1
 # PreToolUse advanced guard — risk-scoring engine.
 # Scores the incoming Bash command across 5 risk categories + branch context,
 # then blocks (exit 1), warns (exit 0 + JSON), or allows silently.
@@ -21,6 +21,8 @@ WARN_THRESHOLD=$(cortex_config '.riskThresholds.warn' '30')
 BLOCK_THRESHOLD=$(cortex_config '.riskThresholds.block' '70')
 [[ "$WARN_THRESHOLD"  =~ ^[0-9]+$ ]] || WARN_THRESHOLD=30
 [[ "$BLOCK_THRESHOLD" =~ ^[0-9]+$ ]] || BLOCK_THRESHOLD=70
+# Guard against inverted thresholds (warn > block) that would block everything above warn.
+(( WARN_THRESHOLD <= BLOCK_THRESHOLD )) || { WARN_THRESHOLD=30; BLOCK_THRESHOLD=70; }
 
 risk=0
 reasons=""

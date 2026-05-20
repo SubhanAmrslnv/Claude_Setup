@@ -16,6 +16,8 @@ done
 org="${CORTEX_REPO_ORG:-SubhanAmrslnv}"
 repo="${CORTEX_REPO_NAME:-Cortex}"
 export CORTEX_REPO_RAW="https://raw.githubusercontent.com/$org/$repo/$ref"
+export CORTEX_REPO_URL="${CORTEX_REPO_URL:-https://github.com/$org/$repo.git}"
+export CORTEX_REF="$ref"
 export CORTEX_TARGET="${PWD}"
 
 # Pull the shared core and execute it.

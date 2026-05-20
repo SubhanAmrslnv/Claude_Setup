@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 2.7.0
+# @version: 2.7.1
 # PostToolUse security scanner — sensitive-file-only, registry-driven.
 # Skips regular source files; only scans config/secrets/credentials files.
 # Hash-cached (skip unchanged). Concurrency-limited. Path-traversal-safe.
@@ -13,9 +13,9 @@ file=$(echo "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 [[ -z "$file" || ! -f "$file" ]] && exit 0
 
 # Path-traversal safety: file must resolve within cwd
-cwd=$(pwd)
+cwd=$(realpath "$(pwd)" 2>/dev/null || readlink -f "$(pwd)" 2>/dev/null || pwd)
 realfile=$(realpath "$file" 2>/dev/null || readlink -f "$file" 2>/dev/null || echo "$file")
-[[ "$realfile" != "$cwd"* ]] && exit 0
+[[ "$realfile" != "$cwd" && "$realfile" != "$cwd"/* ]] && exit 0
 
 # ── Sensitive-file-only filter ────────────────────────────────────────────────
 # Only scan files that could plausibly contain secrets or config credentials.

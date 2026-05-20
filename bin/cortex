@@ -35,8 +35,8 @@ function runInstaller() {
   if (spawnSync('bash', ['--version'], { stdio: 'ignore' }).status !== 0) {
     fail('bash is required (install Git for Windows or WSL).');
   }
-  if (spawnSync('jq', ['--version'], { stdio: 'ignore' }).status !== 0) {
-    fail('jq is required. macOS: `brew install jq`. Linux: `sudo apt install jq`. Windows: `scoop install jq`.');
+  if (spawnSync('git', ['--version'], { stdio: 'ignore' }).status !== 0) {
+    fail('git is required. macOS: Xcode CLT (`xcode-select --install`). Linux: `sudo apt install git`. Windows: install Git for Windows.');
   }
 
   const tmp = path.join(os.tmpdir(), `cortex-install-${Date.now()}.sh`);
@@ -45,7 +45,16 @@ function runInstaller() {
   });
   if (dl.status !== 0) fail('failed to fetch installer core.');
 
-  const env = { ...process.env, CORTEX_REPO_RAW: REPO_RAW, CORTEX_TARGET: process.cwd() };
+  const repoUrl =
+    process.env.CORTEX_REPO_URL ||
+    `https://github.com/${process.env.CORTEX_REPO_ORG || 'SubhanAmrslnv'}/${process.env.CORTEX_REPO_NAME || 'Cortex'}.git`;
+  const env = {
+    ...process.env,
+    CORTEX_REPO_RAW: REPO_RAW,
+    CORTEX_REPO_URL: repoUrl,
+    CORTEX_REF: process.env.CORTEX_REF || 'main',
+    CORTEX_TARGET: process.cwd(),
+  };
   const r = spawnSync('bash', [tmp], { stdio: 'inherit', env });
   fs.rmSync(tmp, { force: true });
   if (r.status !== 0) fail('installer failed.');

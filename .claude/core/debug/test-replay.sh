@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.0.0
+# @version: 1.0.1
 # Re-runs the project's test suite (or a single test if $1 given).
 # Reused as the TestFailed event subscriber.
 
@@ -8,22 +8,25 @@ source "${CORTEX_ROOT:-$(pwd)/.claude}/core/shared/bootstrap.sh" || exit 0
 
 project_root="$(dirname "$CORTEX_ROOT")"
 filter="${1:-}"
+# Shell-quote the filter so metacharacters can't escape the bash -c context below.
+filter_q=""
+[[ -n "$filter" ]] && filter_q=$(printf '%q' "$filter")
 cmd=""
 if [[ -f "$project_root/package.json" ]]; then
   cmd="npm test --silent --"
-  [[ -n "$filter" ]] && cmd="$cmd -t \"$filter\""
+  [[ -n "$filter" ]] && cmd="$cmd -t $filter_q"
 elif compgen -G "$project_root/*.csproj" >/dev/null || compgen -G "$project_root/*.sln" >/dev/null; then
   cmd="dotnet test --nologo -v quiet"
-  [[ -n "$filter" ]] && cmd="$cmd --filter \"$filter\""
+  [[ -n "$filter" ]] && cmd="$cmd --filter $filter_q"
 elif [[ -f "$project_root/Cargo.toml" ]]; then
   cmd="cargo test --quiet"
-  [[ -n "$filter" ]] && cmd="$cmd $filter"
+  [[ -n "$filter" ]] && cmd="$cmd $filter_q"
 elif [[ -f "$project_root/pyproject.toml" || -f "$project_root/pytest.ini" ]]; then
   cmd="pytest -q"
-  [[ -n "$filter" ]] && cmd="$cmd -k \"$filter\""
+  [[ -n "$filter" ]] && cmd="$cmd -k $filter_q"
 elif [[ -f "$project_root/go.mod" ]]; then
   cmd="go test ./..."
-  [[ -n "$filter" ]] && cmd="$cmd -run $filter"
+  [[ -n "$filter" ]] && cmd="$cmd -run $filter_q"
 fi
 
 [[ -z "$cmd" ]] && { jq -nc '{kind:"tests", status:"SKIP", reason:"no test runner detected"}'; exit 0; }

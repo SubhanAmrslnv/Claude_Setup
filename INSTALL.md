@@ -9,13 +9,12 @@ Cortex is an event-driven, project-local AI runtime framework for [Claude Code](
 | Tool | Required | Why |
 |---|---|---|
 | `bash` 4+ | yes | All hook scripts and core logic |
-| `jq` | yes | Every hook parses JSON via `jq`; without it hooks silently no-op |
-| `git` | yes | Branch protection + status-line metrics |
-| `curl` | yes (curl/PowerShell paths) | Fetches the skeleton + scanners |
-| Node 18+ | yes (npx path only) | Powers the `cortex` CLI |
+| `git` | yes | Installer clones the repo; branch protection + status-line metrics |
+| `jq` | yes | Every hook parses JSON via `jq`; without it hooks silently no-op at runtime |
+| `curl` | yes (curl/PowerShell paths) | Fetches `install-core.sh` |
 | [Claude Code](https://claude.ai/code) | yes | Hook + command runtime |
 
-**Install `jq`:**
+**Install `jq`** (runtime requirement for hooks, not the installer):
 ```bash
 # macOS
 brew install jq
@@ -30,7 +29,7 @@ scoop install jq
 winget install jqlang.jq
 ```
 
-Verify: `jq --version`.
+Verify: `jq --version` and `git --version`.
 
 On Windows, use **Git Bash** (ships with [Git for Windows](https://git-scm.com/)) or WSL. PowerShell users still need bash available — the PowerShell installer wraps a bash core.
 
@@ -38,7 +37,7 @@ On Windows, use **Git Bash** (ships with [Git for Windows](https://git-scm.com/)
 
 ## Install
 
-Pick one. All three paths run the same installer core and produce identical output.
+Pick one. All paths produce an identical `.claude/` under the current directory.
 
 ### 1. curl (Linux / macOS / Git Bash)
 ```bash
@@ -51,51 +50,66 @@ iwr -useb https://raw.githubusercontent.com/SubhanAmrslnv/Cortex/main/scripts/in
 ```
 Requires bash on PATH (`Git for Windows` is enough).
 
-### 3. npx (any OS with Node 18+)
+### 3. Manual git sparse clone (no installer)
+
+Run from the root of the project where you want `.claude/` to land.
+
+**Bash (Linux / macOS / Git Bash), requires git 2.27+:**
 ```bash
-npx @subhanamrslnv/cortex-cli init
+git clone --depth 1 --filter=blob:none --sparse --branch main \
+  https://github.com/SubhanAmrslnv/Cortex.git .cortex-tmp
+git -C .cortex-tmp sparse-checkout set .claude
+cp -R .cortex-tmp/.claude .
+rm -rf .cortex-tmp
+```
+
+One-liner:
+```bash
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/SubhanAmrslnv/Cortex.git .cortex-tmp && git -C .cortex-tmp sparse-checkout set .claude && cp -R .cortex-tmp/.claude . && rm -rf .cortex-tmp
+```
+
+**PowerShell (Windows):**
+```powershell
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/SubhanAmrslnv/Cortex.git .cortex-tmp
+git -C .cortex-tmp sparse-checkout set .claude
+Copy-Item .cortex-tmp/.claude . -Recurse -Force
+Remove-Item .cortex-tmp -Recurse -Force
+```
+
+**No-git fallback (tarball, any POSIX shell):**
+```bash
+curl -fsSL https://codeload.github.com/SubhanAmrslnv/Cortex/tar.gz/refs/heads/main \
+  | tar -xz --strip-components=1 Cortex-main/.claude
 ```
 
 ### Override the branch
 ```bash
 curl -fsSL .../install.sh | bash -s -- --ref=feat/vnext
 ```
+Or, for the manual clone, change `--branch main` to your target ref.
 
 ---
 
 ## What the installer does
 
-1. **Language detection** — scans the current directory for: `package.json`, `*.csproj`/`*.sln`, `go.mod`, `Cargo.toml`, `pyproject.toml`/`requirements.txt`/`setup.py`, `pom.xml`/`build.gradle`, `Dockerfile*`, `*.tf`, `*.sh`. Each match adds one language to the keep-set.
-2. **Skeleton fetch** — pulls `settings.json`, all registry files, the shared bootstrap, every guard, the runtime hooks (prompt-router, post-format, post-scan, post-error-analyzer, stop-build), the event bus + dispatcher, the planner, the model router, memory, the seven debug probes, the status-line renderer, the four commands (`init-cortex`, `update-cortex`, `debug`, `commit`), and the four project memory stubs.
-3. **Language-aware scanners** — fetches only `core/scanners/<lang>/` for detected languages plus `generic/`. The current shipped set is: `bash`, `docker`, `dotnet`, `generic`, `node` (covers JS/TS/JSX/TSX/Vue/Svelte/HTML/CSS/SCSS), `powershell`, `python`, `sql`.
-4. **Local-only directories** — creates `cache/`, `logs/`, `temp/events/`, `state/` under `.claude/`.
-5. **Executable bits** — `chmod +x` on every shell script (POSIX systems).
+1. **Sparse clone** — `git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/SubhanAmrslnv/Cortex.git` into a temp dir, then `git sparse-checkout set .claude` so only `.claude/` is materialised.
+2. **Overlay copy** — copies `.claude/` from the clone into the target project. User-local subtrees (`project/memory/`, `cache/`, `logs/`, `temp/`, `state/`) are preserved untouched if they already exist.
+3. **Local-only directories** — ensures `cache/`, `logs/`, `temp/events/`, `state/`, and `project/memory/plans/` exist under `.claude/`.
+4. **Executable bits** — `chmod +x` on every shell script under `core/` (POSIX systems).
 
 Idempotent: re-running upgrades in place. `cache/`, `logs/`, `temp/`, `state/`, and `project/memory/` are never overwritten by the installer.
+
+Override the source with `CORTEX_REPO_URL=https://github.com/<fork>/Cortex.git` or `CORTEX_REF=<branch|tag|sha>`.
 
 ---
 
 ## Activate
 
-`npx @subhanamrslnv/cortex-cli init` already validates and prunes — open Claude Code and you're ready. There is no in-Claude activation step.
-
-What `init` checks at the end of an install:
-- Every hook listed in `.claude/registry/hooks.json` exists on disk.
-- Every command listed in `.claude/registry/commands.json` has a matching `.claude/commands/<name>.md`.
-- `.claude/settings.json` has a `hooks` block wiring real scripts.
-- Scanner directories for languages not in the active set are pruned.
-- Local-only directories (`cache/`, `logs/`, `temp/events/`, `state/`, `project/memory/plans/`) exist.
-
-If validation surfaces issues (e.g. a hook from the registry didn't land on disk), `init` exits non-zero and tells you to re-run `cortex update`.
+Once `.claude/` is in place, open Claude Code in the project — there is no separate activation step.
 
 ---
 
 ## Verify
-
-**Quick local check (no network):**
-```bash
-npx @subhanamrslnv/cortex-cli doctor
-```
 
 **Status-line check** — open Claude Code in the project. You should see a five-line block under the chatbox:
 ```
@@ -119,15 +133,21 @@ bash .claude/test/run.sh
 
 ## Update
 
-```bash
-# npx (recommended)
-npx @subhanamrslnv/cortex-cli update
+Re-run any of the install paths — they are idempotent.
 
-# curl re-run (same as install — installer is idempotent)
+```bash
+# curl
 curl -fsSL https://raw.githubusercontent.com/SubhanAmrslnv/Cortex/main/scripts/install.sh | bash
+
+# Manual sparse clone (overwrite in place)
+git clone --depth 1 --filter=blob:none --sparse --branch main \
+  https://github.com/SubhanAmrslnv/Cortex.git .cortex-tmp
+git -C .cortex-tmp sparse-checkout set .claude
+cp -R .cortex-tmp/.claude .
+rm -rf .cortex-tmp
 ```
 
-Updates touch only the skeleton files. Anything under `.claude/cache/`, `.claude/logs/`, `.claude/temp/`, `.claude/state/`, and `.claude/project/memory/` is preserved. There is no in-Claude `/update-cortex` slash command — npx is the single source of truth.
+Updates via the scripted installers touch only the framework files. Anything under `.claude/cache/`, `.claude/logs/`, `.claude/temp/`, `.claude/state/`, and `.claude/project/memory/` is preserved. The raw manual clone overwrites `.claude/` wholesale — back up user-local state first if you go that route.
 
 ---
 
@@ -171,9 +191,9 @@ There is no other state to clean. Cortex never writes outside the project direct
 
 ## Troubleshooting
 
-**Status line shows `│ Cortex │ —`** — bootstrap failed. Run `cortex doctor` to find the missing file. Most common causes: `jq` not on PATH, or the project moved and `.claude/` wasn't carried over.
+**Status line shows `│ Cortex │ —`** — bootstrap failed. Most common causes: `jq` not on PATH (runtime requirement for hooks), or the project moved and `.claude/` wasn't carried over. Inspect with `bash .claude/core/statusline/render.sh < /dev/null`.
 
-**Hooks count low** (e.g. `🪝 Hooks 12/28`) — some script files in the registry don't exist on disk. Run `npx @subhanamrslnv/cortex-cli update` to re-fetch.
+**Hooks count low** (e.g. `🪝 Hooks 12/28`) — some script files in the registry don't exist on disk. Re-run the installer to re-fetch.
 
 **Context % stuck at `—`** — Claude Code didn't pass `transcript_path` in the session JSON. This happens during synthetic tests; in a real session it always populates.
 

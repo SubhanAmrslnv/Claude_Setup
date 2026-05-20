@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.5.0
+# @version: 1.5.1
 # Stop hook — detects project type, runs the build, streams output, reports failures.
 # Skips build if project is already running (debug/dev session active).
 # Retries up to 3 times before giving up. Does NOT auto-fix.
@@ -50,10 +50,10 @@ detect_build_cmd() {
     return
   fi
 
-  # Python — syntax-check all .py files
+  # Python — syntax-check all .py files (compileall handles paths with spaces)
   if [[ -f requirements.txt || -f pyproject.toml || -f setup.py ]]; then
-    py_files=$(find . -name "*.py" -not -path "*/__pycache__/*" -not -path "*/venv/*" -not -path "*/.venv/*" 2>/dev/null | tr '\n' ' ')
-    [[ -n "$py_files" ]] && echo "python -m py_compile $py_files" && return
+    echo "python -m compileall -q -x '(__pycache__|venv|\.venv)' ."
+    return
   fi
 
   # Java — Maven

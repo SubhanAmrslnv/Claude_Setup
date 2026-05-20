@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.0.0
+# @version: 1.0.1
 # Scans .py files for hardcoded secrets, dangerous builtins, unsafe subprocess,
 # insecure HTTP, SQL string concatenation, and other common vulnerability patterns.
 # Usage: security-scan.sh <file_path>
@@ -32,8 +32,11 @@ if grep -qiE 'http://[a-zA-Z]' "$file"; then
   echo "[WARNING] insecure http:// URL in $file — use https://"
 fi
 
-if grep -qiE '(execute|cursor\.execute)\s*\(.*\+|%.*%\s*\(' "$file"; then
-  echo "[WARNING] possible SQL string concatenation in $file — use parameterized queries"
+# Catch the common SQLi shapes: string concatenation, %-formatting, and
+# f-strings inside an execute() call. Previous pattern required two `%` chars
+# and never fired on the common single-`%`-format case.
+if grep -qiE '\bexecute\s*\(\s*([fbru]*["'"'"'][^"'"'"']*["'"'"']\s*[%+]|f["'"'"'][^"'"'"']*\{|.*\+\s*[a-zA-Z_])' "$file"; then
+  echo "[WARNING] possible SQL string interpolation in $file — use parameterized queries"
 fi
 
 if grep -qiE '__import__\s*\(' "$file"; then

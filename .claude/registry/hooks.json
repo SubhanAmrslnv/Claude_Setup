@@ -4,7 +4,7 @@
     "source": "core/shared/bootstrap.sh"
   },
   "pre-guard.sh": {
-    "version": "2.4.0",
+    "version": "2.4.1",
     "source": "core/hooks/guards/pre-guard.sh"
   },
   "permission-request.sh": {
@@ -24,7 +24,7 @@
     "source": "core/hooks/runtime/post-format.sh"
   },
   "post-scan.sh": {
-    "version": "2.7.0",
+    "version": "2.7.1",
     "source": "core/hooks/runtime/post-scan.sh"
   },
   "post-error-analyzer.sh": {
@@ -32,7 +32,7 @@
     "source": "core/hooks/runtime/post-error-analyzer.sh"
   },
   "stop-build.sh": {
-    "version": "1.5.0",
+    "version": "1.5.1",
     "source": "core/hooks/runtime/stop-build.sh"
   },
   "events/bus.sh": {
@@ -96,7 +96,7 @@
     "source": "core/debug/build-watcher.sh"
   },
   "debug/test-replay.sh": {
-    "version": "1.0.0",
+    "version": "1.0.1",
     "source": "core/debug/test-replay.sh"
   },
   "debug/network-trace.sh": {

@@ -18,14 +18,34 @@ curl -fsSL https://raw.githubusercontent.com/SubhanAmrslnv/Cortex/main/scripts/i
 iwr -useb https://raw.githubusercontent.com/SubhanAmrslnv/Cortex/main/scripts/install.ps1 | iex
 ```
 
-### npm / npx
+### Manual git sparse clone (no installer)
+Run from the project root where you want `.claude/` to land. Requires git 2.27+.
+
 ```bash
-npx @subhanamrslnv/cortex-cli init
+git clone --depth 1 --filter=blob:none --sparse --branch main \
+  https://github.com/SubhanAmrslnv/Cortex.git .cortex-tmp
+git -C .cortex-tmp sparse-checkout set .claude
+cp -R .cortex-tmp/.claude .
+rm -rf .cortex-tmp
 ```
 
-All three paths run the same installer core. They detect the project's language(s), fetch only the matching scanners + `generic`, and write a complete `.claude/` skeleton into the current directory.
+PowerShell:
+```powershell
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/SubhanAmrslnv/Cortex.git .cortex-tmp
+git -C .cortex-tmp sparse-checkout set .claude
+Copy-Item .cortex-tmp/.claude . -Recurse -Force
+Remove-Item .cortex-tmp -Recurse -Force
+```
 
-**Prerequisites:** `bash 4+`, `jq`, `git`, Node 18+ (npm path only).
+No-git fallback (tarball):
+```bash
+curl -fsSL https://codeload.github.com/SubhanAmrslnv/Cortex/tar.gz/refs/heads/main \
+  | tar -xz --strip-components=1 Cortex-main/.claude
+```
+
+All paths run the same flow: a shallow + sparse pull of `.claude/` from the repo, copied into the current directory. The scripted installers preserve user-local subtrees (`project/memory/`, `cache/`, `logs/`, `temp/`, `state/`) on re-runs.
+
+**Prerequisites:** `bash 4+`, `git`, `curl`, `jq` (runtime).
 
 ---
 
@@ -147,36 +167,22 @@ In-Claude slash commands:
 | `/debug`  | Runtime-aware debugging: 5 parallel probes + self-healing loop.  |
 | `/commit` | Conventional commit with branch routing.                         |
 
-Install / update / validate live in the **npx CLI** rather than as slash commands:
-```bash
-npx @subhanamrslnv/cortex-cli init      # install + validate
-npx @subhanamrslnv/cortex-cli update    # re-fetch + re-validate
-npx @subhanamrslnv/cortex-cli doctor    # local sanity check
-```
+Install and update happen via the scripted installers or the manual sparse clone — see [Installation](#installation). There are no in-Claude `init` or `update` slash commands.
 
-The earlier analyzer commands and the `/init-cortex` / `/update-cortex` slash commands were removed in the vNext redesign. Their work folds into `/debug` evidence, the npx CLI, or is performed ad-hoc by the model.
+The earlier analyzer commands and the `/init-cortex` / `/update-cortex` slash commands were removed in the vNext redesign. Their work folds into `/debug` evidence or is performed ad-hoc by the model.
 
 ---
 
-## CLI
+## Install flow
 
-The CLI is the **canonical bootstrap** — there are no in-Claude `init` or `update` commands.
+Whichever path you pick, the same thing happens under the hood:
 
-```bash
-npx @subhanamrslnv/cortex-cli init       # install + validate .claude/ in the current project
-npx @subhanamrslnv/cortex-cli update     # re-fetch + re-validate (idempotent)
-npx @subhanamrslnv/cortex-cli doctor     # local sanity check (no network)
-npx @subhanamrslnv/cortex-cli --version
-```
+1. `git clone --depth 1 --sparse` the Cortex repo (default `main`) into a temp dir, materialising only `.claude/`.
+2. Copy `.claude/` into the target project. Scripted installers overlay — preserving user-local subtrees (`project/memory/`, `cache/`, `logs/`, `temp/`, `state/`). The raw manual clone overwrites wholesale.
+3. Ensure local-only directories exist (`cache/`, `logs/`, `temp/events/`, `state/`, `project/memory/plans/`).
+4. `chmod +x` every shell script under `core/` (POSIX systems).
 
-`init` and `update` both:
-1. Detect the project's languages.
-2. Download the matching skeleton + scanners from GitHub raw.
-3. Validate the registry against the filesystem (hooks present, commands present, settings wired).
-4. Prune stale scanner directories that aren't in the active language set.
-5. Create local-only directories (`cache/`, `logs/`, `temp/events/`, `state/`, `project/memory/`).
-
-`doctor` runs steps 3–5 in **check-only** mode (no scanner deletion, no installer).
+Override the source with `CORTEX_REPO_URL=...` or `CORTEX_REF=<branch|tag|sha>` when using the scripted installers.
 
 ---
 
