@@ -205,12 +205,12 @@ In-Claude slash commands (kept minimal):
 | `/debug`  | Runtime-aware self-healing debugger (5 parallel probes + retrieve + patch loop).    |
 | `/commit` | Conventional commit; branch routing; no Claude attribution.                         |
 
-**Install / update / validate is handled by `npx @cortex/cli`** — not by slash commands. The previous `/init-cortex` and `/update-cortex` slash commands have been removed. Use:
+**Install / update / validate is handled by `npx @subhanamrslnv/cortex-cli`** — not by slash commands. The previous `/init-cortex` and `/update-cortex` slash commands have been removed. Use:
 
 ```bash
-npx @cortex/cli init      # install + validate .claude/ in the current project
-npx @cortex/cli update    # re-fetch + re-validate
-npx @cortex/cli doctor    # local sanity check (no network)
+npx @subhanamrslnv/cortex-cli init      # install + validate .claude/ in the current project
+npx @subhanamrslnv/cortex-cli update    # re-fetch + re-validate
+npx @subhanamrslnv/cortex-cli doctor    # local sanity check (no network)
 ```
 
 The analyzer commands (`/doctor`, `/hotspot`, `/impact`, `/timeline`, `/optimize`, `/overengineering-check`, `/pr-check`, `/regression`, `/pattern-drift`, `/documentation`) were removed in the vNext redesign.

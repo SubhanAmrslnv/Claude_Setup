@@ -53,7 +53,7 @@ Requires bash on PATH (`Git for Windows` is enough).
 
 ### 3. npx (any OS with Node 18+)
 ```bash
-npx @cortex/cli init
+npx @subhanamrslnv/cortex-cli init
 ```
 
 ### Override the branch
@@ -77,7 +77,7 @@ Idempotent: re-running upgrades in place. `cache/`, `logs/`, `temp/`, `state/`, 
 
 ## Activate
 
-`npx @cortex/cli init` already validates and prunes — open Claude Code and you're ready. There is no in-Claude activation step.
+`npx @subhanamrslnv/cortex-cli init` already validates and prunes — open Claude Code and you're ready. There is no in-Claude activation step.
 
 What `init` checks at the end of an install:
 - Every hook listed in `.claude/registry/hooks.json` exists on disk.
@@ -94,7 +94,7 @@ If validation surfaces issues (e.g. a hook from the registry didn't land on disk
 
 **Quick local check (no network):**
 ```bash
-npx @cortex/cli doctor
+npx @subhanamrslnv/cortex-cli doctor
 ```
 
 **Status-line check** — open Claude Code in the project. You should see a five-line block under the chatbox:
@@ -121,7 +121,7 @@ bash .claude/test/run.sh
 
 ```bash
 # npx (recommended)
-npx @cortex/cli update
+npx @subhanamrslnv/cortex-cli update
 
 # curl re-run (same as install — installer is idempotent)
 curl -fsSL https://raw.githubusercontent.com/SubhanAmrslnv/Cortex/main/scripts/install.sh | bash
@@ -173,7 +173,7 @@ There is no other state to clean. Cortex never writes outside the project direct
 
 **Status line shows `│ Cortex │ —`** — bootstrap failed. Run `cortex doctor` to find the missing file. Most common causes: `jq` not on PATH, or the project moved and `.claude/` wasn't carried over.
 
-**Hooks count low** (e.g. `🪝 Hooks 12/28`) — some script files in the registry don't exist on disk. Run `npx @cortex/cli update` to re-fetch.
+**Hooks count low** (e.g. `🪝 Hooks 12/28`) — some script files in the registry don't exist on disk. Run `npx @subhanamrslnv/cortex-cli update` to re-fetch.
 
 **Context % stuck at `—`** — Claude Code didn't pass `transcript_path` in the session JSON. This happens during synthetic tests; in a real session it always populates.
 

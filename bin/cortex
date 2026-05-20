@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Cortex CLI — `npx @cortex/cli` entrypoint.
+// Cortex CLI — `npx @subhanamrslnv/cortex-cli` entrypoint.
 //
 //   cortex init           Install + validate .claude/ into the current project
 //   cortex update         Re-fetch the skeleton (idempotent upgrade)
@@ -32,10 +32,10 @@ function readJson(p) {
 }
 
 function runInstaller() {
-  if (!spawnSync('bash', ['--version'], { stdio: 'ignore' }).status === 0) {
+  if (spawnSync('bash', ['--version'], { stdio: 'ignore' }).status !== 0) {
     fail('bash is required (install Git for Windows or WSL).');
   }
-  if (!spawnSync('jq', ['--version'], { stdio: 'ignore' }).status === 0) {
+  if (spawnSync('jq', ['--version'], { stdio: 'ignore' }).status !== 0) {
     fail('jq is required. macOS: `brew install jq`. Linux: `sudo apt install jq`. Windows: `scoop install jq`.');
   }
 
@@ -149,10 +149,10 @@ switch (cmd) {
 `cortex ${pkg.version}
 
 Usage:
-  npx @cortex/cli init      Install + validate .claude/ in the current project
-  npx @cortex/cli update    Re-fetch and re-validate the skeleton
-  npx @cortex/cli doctor    Local sanity check (no network)
-  npx @cortex/cli --version
+  npx @subhanamrslnv/cortex-cli init      Install + validate .claude/ in the current project
+  npx @subhanamrslnv/cortex-cli update    Re-fetch and re-validate the skeleton
+  npx @subhanamrslnv/cortex-cli doctor    Local sanity check (no network)
+  npx @subhanamrslnv/cortex-cli --version
 
 Cortex is strictly project-local. There is no global install and no in-Claude
 init/update command — npx is the canonical bootstrap.`);

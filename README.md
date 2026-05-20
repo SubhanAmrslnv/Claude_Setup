@@ -20,7 +20,7 @@ iwr -useb https://raw.githubusercontent.com/SubhanAmrslnv/Cortex/main/scripts/in
 
 ### npm / npx
 ```bash
-npx @cortex/cli init
+npx @subhanamrslnv/cortex-cli init
 ```
 
 All three paths run the same installer core. They detect the project's language(s), fetch only the matching scanners + `generic`, and write a complete `.claude/` skeleton into the current directory.
@@ -149,9 +149,9 @@ In-Claude slash commands:
 
 Install / update / validate live in the **npx CLI** rather than as slash commands:
 ```bash
-npx @cortex/cli init      # install + validate
-npx @cortex/cli update    # re-fetch + re-validate
-npx @cortex/cli doctor    # local sanity check
+npx @subhanamrslnv/cortex-cli init      # install + validate
+npx @subhanamrslnv/cortex-cli update    # re-fetch + re-validate
+npx @subhanamrslnv/cortex-cli doctor    # local sanity check
 ```
 
 The earlier analyzer commands and the `/init-cortex` / `/update-cortex` slash commands were removed in the vNext redesign. Their work folds into `/debug` evidence, the npx CLI, or is performed ad-hoc by the model.
@@ -163,10 +163,10 @@ The earlier analyzer commands and the `/init-cortex` / `/update-cortex` slash co
 The CLI is the **canonical bootstrap** — there are no in-Claude `init` or `update` commands.
 
 ```bash
-npx @cortex/cli init       # install + validate .claude/ in the current project
-npx @cortex/cli update     # re-fetch + re-validate (idempotent)
-npx @cortex/cli doctor     # local sanity check (no network)
-npx @cortex/cli --version
+npx @subhanamrslnv/cortex-cli init       # install + validate .claude/ in the current project
+npx @subhanamrslnv/cortex-cli update     # re-fetch + re-validate (idempotent)
+npx @subhanamrslnv/cortex-cli doctor     # local sanity check (no network)
+npx @subhanamrslnv/cortex-cli --version
 ```
 
 `init` and `update` both:
