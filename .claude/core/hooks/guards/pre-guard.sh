@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 2.4.1
+# @version: 2.5.0
 # PreToolUse advanced guard — risk-scoring engine.
 # Scores the incoming Bash command across 5 risk categories + branch context,
 # then blocks (exit 1), warns (exit 0 + JSON), or allows silently.
@@ -8,6 +8,9 @@
 #   risk < 30  → allow (silent)
 #   risk 30-69 → allow with warning
 #   risk ≥ 70  → block
+#
+# Catastrophic patterns (rm -rf, curl|sh) score +70 directly so they block on
+# their own without needing branch/context multipliers.
 
 source "${CORTEX_ROOT:-$(pwd)/.claude}/core/shared/bootstrap.sh" || exit 0
 
@@ -35,7 +38,7 @@ add_suggestion(){ suggestions="${suggestions:+$suggestions; }$1"; }
 # A. Destructive Actions (+50 each)
 # ---------------------------------------------------------------------------
 if echo "$cmd" | grep -qiE '(^|;|&&|\|\||\s)rm\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r|-r\s+-f|-f\s+-r|--recursive\s+--force|--force\s+--recursive)'; then
-  (( risk += 50 ))
+  (( risk += 70 ))
   add_reason "rm -rf detected"
   add_suggestion "use 'rm -ri' for interactive confirmation"
 fi
@@ -96,7 +99,7 @@ fi
 # D. Security Threats (+40 each)
 # ---------------------------------------------------------------------------
 if echo "$cmd" | grep -qiE '(curl|wget)(\s+\S+)*\s*\|\s*(bash|sh|zsh|python|node|ruby|perl)'; then
-  (( risk += 40 ))
+  (( risk += 70 ))
   add_reason "remote code execution via pipe-to-shell"
   add_suggestion "download the script first, inspect it, then execute: curl -O url && cat script.sh && bash script.sh"
 fi

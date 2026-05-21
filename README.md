@@ -54,7 +54,7 @@ All paths run the same flow: a shallow + sparse pull of `.claude/` from the repo
 ```
 .claude/
   settings.json                       hook wirings — minimal, event-driven
-  commands/                           init-cortex, update-cortex, debug, commit
+  commands/                           debug, commit
   core/
     shared/bootstrap.sh               CORTEX_ROOT resolution, publish_event()
     hooks/

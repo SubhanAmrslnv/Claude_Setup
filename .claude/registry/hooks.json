@@ -4,7 +4,7 @@
     "source": "core/shared/bootstrap.sh"
   },
   "pre-guard.sh": {
-    "version": "2.4.1",
+    "version": "2.5.0",
     "source": "core/hooks/guards/pre-guard.sh"
   },
   "permission-request.sh": {
