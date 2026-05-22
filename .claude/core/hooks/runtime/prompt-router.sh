@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @version: 1.1.0
+# @version: 1.1.1
 # UserPromptSubmit — intent router. Replaces prompt-optimizer.sh.
 #
 # Reads the raw prompt from stdin, classifies it into one of 32 intent labels
@@ -107,5 +107,5 @@ if (( yes_policy )); then
   extra=$'\n\nGLOBAL ANSWER POLICY: Default all binary decisions to YES, except destructive or security-sensitive ones.'
 fi
 
-jq -nc --arg p "$prompt$extra" --arg i "$intent" \
-  '{hookSpecificOutput:{hookEventName:"UserPromptSubmit", additionalContext:""}, env:{CORTEX_INTENT:$i}, prompt:$p}'
+printf '%s' "$prompt$extra" | jq -Rsc --arg i "$intent" \
+  '{hookSpecificOutput:{hookEventName:"UserPromptSubmit", additionalContext:""}, env:{CORTEX_INTENT:$i}, prompt:.}'
